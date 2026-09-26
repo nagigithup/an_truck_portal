@@ -1,0 +1,6 @@
+node_modules/
+frontend/node_modules/
+an_truck_portal/public/node_modules
+__pycache__/
+*.py[cod]
+.pytest_cache/

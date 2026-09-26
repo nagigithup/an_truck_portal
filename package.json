@@ -1,0 +1,1 @@
+{"name":"an-truck-portal","private":true,"scripts":{"build":"npm --prefix frontend run build"}}
