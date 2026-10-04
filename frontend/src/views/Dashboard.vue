@@ -1,2 +1,90 @@
-<script setup>import{inject,onMounted,ref}from'vue';import{call,__}from'../api';const{ctx}=inject('portal'),state=ref('loading'),data=ref({});onMounted(async()=>{try{data.value=await call('an_truck_portal.api.dashboard.get_dashboard',{company:ctx.company});state.value='ready'}catch(e){state.value='error';data.value={error:e.message}}});</script>
-<template><div class="page"><div class="page-head"><div><p class="eyebrow">{{__('Operations')}}</p><h1>{{__('Home')}}</h1><p>{{__('Truck import, purchasing, vehicles and sales at a glance.')}}</p></div></div><div v-if="state==='loading'" class="skeleton-grid"><i v-for="n in 7"/></div><div v-else-if="state==='error'" class="empty">{{data.error}}</div><template v-else><div class="cards"><article v-for="c in data.cards" class="metric"><small>{{__(c.label)}}</small><strong>{{c.state==='ready'?c.value:__('Not available')}}</strong><span>{{c.doctype}}</span></article></div><div class="columns"><section class="panel"><h2>{{__('Recently updated import files')}}</h2><div v-if="data.recent_imports?.length" class="rows"><router-link v-for="r in data.recent_imports" :to="`/import-files/${r.name}`"><b>{{r.import_title||r.name}}</b><small>{{r.supplier}} · {{r.status}}</small></router-link></div><div v-else class="empty">{{data.recent_imports===null?__('Not available'):__('No records')}}</div></section><section class="panel"><h2>{{__('Vehicles requiring attention')}}</h2><div v-if="data.vehicles?.length" class="rows"><router-link v-for="r in data.vehicles" :to="`/vehicles/${r.name}`"><b class="ltr">{{r.vin}}</b><small>{{r.brand}} {{r.model}} · {{r.vehicle_status}}</small></router-link></div><div v-else class="empty">{{data.vehicles===null?__('Not available'):__('No records')}}</div></section></div></template></div></template>
+<script setup>
+import { inject, onMounted, ref } from "vue";
+import { call, __ } from "../api";
+import PageHeader from "../components/PageHeader.vue";
+import AppCard from "../components/AppCard.vue";
+import StatCard from "../components/StatCard.vue";
+import LoadingState from "../components/LoadingState.vue";
+import EmptyState from "../components/EmptyState.vue";
+import AppButton from "../components/AppButton.vue";
+const { ctx } = inject("portal"),
+	state = ref("loading"),
+	data = ref({}),
+	error = ref("");
+async function load() {
+	state.value = "loading";
+	try {
+		data.value = await call("an_truck_portal.api.dashboard.get_dashboard", {
+			company: ctx.company,
+		});
+		state.value = "ready";
+	} catch (e) {
+		error.value = e.message;
+		state.value = "error";
+	}
+}
+onMounted(load);
+</script>
+<template>
+	<div class="page">
+		<PageHeader
+			:eyebrow="__('Operations')"
+			:title="__('Home')"
+			:subtitle="__('Truck import, purchasing, vehicles and sales at a glance.')"
+		/>
+		<LoadingState v-if="state === 'loading'" />
+		<EmptyState v-else-if="state === 'error'" :message="__(error)" error
+			><AppButton @click="load">{{ __("Retry") }}</AppButton></EmptyState
+		>
+		<template v-else
+			><div class="cards">
+				<StatCard
+					v-for="card in data.cards"
+					:key="card.label"
+					:label="__(card.label)"
+					:value="
+						card.state === 'ready'
+							? String(card.value) + (card.capped ? '+' : '')
+							: __('Not available')
+					"
+				/>
+			</div>
+			<div class="columns">
+				<AppCard :title="__('Recently updated import files')"
+					><div v-if="data.recent_imports?.length" class="rows">
+						<router-link
+							v-for="record in data.recent_imports"
+							:key="record.name"
+							:to="'/import-files/' + encodeURIComponent(record.name)"
+							><b>{{ record.import_title || record.name }}</b
+							><small
+								>{{ record.supplier }} · {{ __(record.status) }}</small
+							></router-link
+						>
+					</div>
+					<EmptyState
+						v-else
+						:message="
+							__(data.recent_imports === null ? 'Not available' : 'No records')
+						"
+				/></AppCard>
+				<AppCard :title="__('Vehicles requiring attention')"
+					><div v-if="data.vehicles?.length" class="rows">
+						<router-link
+							v-for="record in data.vehicles"
+							:key="record.name"
+							:to="'/vehicles/' + encodeURIComponent(record.name)"
+							><b class="ltr-value">{{ record.vin }}</b
+							><small
+								>{{ record.brand }} {{ record.model }} ·
+								{{ __(record.vehicle_status) }}</small
+							></router-link
+						>
+					</div>
+					<EmptyState
+						v-else
+						:message="__(data.vehicles === null ? 'Not available' : 'No records')"
+				/></AppCard></div
+		></template>
+	</div>
+</template>
