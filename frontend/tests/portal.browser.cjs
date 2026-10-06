@@ -108,6 +108,159 @@ function options(dt) {
     { name: `${p}_details`, label: `${dt} Details`, type: "Text" },
   ];
 }
+function importWorkspace() {
+  const permissions = Object.fromEntries(
+    doctypes.map((dt) => [
+      dt,
+      { read: true, create: true, write: true, submit: true },
+    ]),
+  );
+  const po = {
+    name: "PO-2026-00127",
+    date: "2026-10-01",
+    party: "Eastern Heavy Vehicles",
+    currency: "USD",
+    amount: 240000,
+    total_qty: 3,
+    status: "To Receive and Bill",
+    docstatus: 1,
+    per_received: 33.33,
+  };
+  const receipt = {
+    name: "PR-2026-00054",
+    date: "2026-10-03",
+    party: "Eastern Heavy Vehicles",
+    currency: "USD",
+    amount: 80000,
+    total_qty: 1,
+    status: "To Bill",
+    docstatus: 1,
+  };
+  return {
+    import_file: {
+      name: "VIF-2026-00009",
+      title: "October Tractor Shipment",
+      supplier: "Eastern Heavy Vehicles",
+      status: "Partially Received",
+      supplier_currency: "USD",
+      company_currency: "AED",
+      modified: "2026-10-05 14:25:00",
+    },
+    summary: {
+      purchase_status: "Partially Received",
+      receiving_status: "Partially Received",
+      expected: 3,
+      received: 1,
+      remaining: 2,
+      created: 1,
+      vins_entered: 1,
+      currency: "AED",
+      supplier_currency: "USD",
+      purchase_value: 240000,
+      additional_cost: 12500,
+      final_valuation: 305000,
+      last_update: "2026-10-05 14:25:00",
+    },
+    process: [
+      ["import_file", "Import File", "complete"],
+      ["purchase_order", "Purchase Order", "complete"],
+      ["shipping", "Supplier / Shipping", "complete"],
+      ["receiving", "Vehicle Receipt", "current"],
+      ["vin", "VIN Entry", "complete"],
+      ["vehicles", "Vehicle Records", "complete"],
+      ["costs", "Import Costs", "complete"],
+      ["completed", "Completed", "pending"],
+    ].map(([key, label, state]) => ({ key, label, state })),
+    purchase: { orders: [po], primary: po },
+    receiving: {
+      purchase_orders: [po],
+      expected: 3,
+      received: 1,
+      remaining: 2,
+    },
+    vehicles: [
+      {
+        name: "VM-TRUCK-001",
+        vin: "LZZ1CLVB0RA123456",
+        item_code: "TRACTOR-6X4",
+        item_name: "6×4 Tractor Head",
+        model: "A7 Pro",
+        model_year: 2026,
+        color: "White",
+        supplier: "Eastern Heavy Vehicles",
+        purchase_order: po.name,
+        purchase_receipt: receipt.name,
+        warehouse: "Vehicle Yard - AN",
+        vehicle_status: "Available",
+        vehicle_master_status: "Created",
+        receiving_status: "Received",
+        sales_status: "Available",
+        purchase_valuation_rate: 292500,
+        landed_cost_added: 12500,
+        final_valuation_rate: 305000,
+        cost_currency: "AED",
+        warranty: { name: "VW-001", status: "Active" },
+      },
+    ],
+    costs: {
+      total: 12500,
+      currency: "AED",
+      rows: [
+        {
+          voucher: "LCV-2026-00018",
+          idx: 1,
+          description: "Customs",
+          expense_account: "Customs Charges - AN",
+          amount: 12500,
+          account_currency: "AED",
+          date: "2026-10-04",
+          docstatus: 1,
+        },
+      ],
+    },
+    documents: {
+      purchase_orders: [po],
+      purchase_receipts: [receipt],
+      purchase_invoices: [],
+      supplier_payments: [],
+      landed_cost_vouchers: [
+        {
+          name: "LCV-2026-00018",
+          date: "2026-10-04",
+          amount: 12500,
+          docstatus: 1,
+        },
+      ],
+      quotations: [],
+      sales_orders: [],
+      delivery_notes: [],
+      sales_invoices: [],
+      customer_payments: [],
+    },
+    activity: [
+      {
+        type: "landed_cost_vouchers",
+        label: "Landed Cost updated",
+        document: "LCV-2026-00018",
+        timestamp: "2026-10-04 16:00:00",
+      },
+      {
+        type: "purchase_receipts",
+        label: "Vehicles received",
+        document: receipt.name,
+        timestamp: "2026-10-03 10:00:00",
+      },
+      {
+        type: "purchase_orders",
+        label: "Purchase Order created",
+        document: po.name,
+        timestamp: "2026-10-01 09:00:00",
+      },
+    ],
+    permissions,
+    next_actions: ["receive_vehicles", "add_import_cost"],
+  };
+}
 const server = http.createServer(async (req, res) => {
   const url = new URL(req.url, "http://localhost");
   if (url.pathname.includes("/assets/")) {
@@ -241,6 +394,72 @@ const server = http.createServer(async (req, res) => {
       assert.equal(req.headers["x-frappe-csrf-token"], "fixture-token");
       saved.push(args);
       message = { name: `${dt}-001` };
+    } else if (method === "get_import_workspace") {
+      message = importWorkspace();
+      if (args.vehicle_import_file === "VIF-NO-PO") {
+        message.import_file.name = "VIF-NO-PO";
+        message.import_file.title = "New Import Contract";
+        message.summary.purchase_status = "Not Started";
+        message.purchase = { orders: [], primary: null };
+        message.receiving.purchase_orders = [];
+        message.documents.purchase_orders = [];
+        message.next_actions = ["create_purchase_order"];
+      }
+    } else if (method === "get_import_form_options")
+      message = {
+        today: "2026-10-06",
+        items: [
+          {
+            name: "TRACTOR-6X4",
+            item_name: "6×4 Tractor Head",
+            stock_uom: "Nos",
+            has_serial_no: 1,
+          },
+        ],
+        warehouses: [{ name: "Vehicle Yard - AN" }],
+        expense_accounts: [
+          { name: "Customs Charges - AN", account_currency: "AED" },
+        ],
+      };
+    else if (method === "get_purchase_order_items")
+      message = [
+        {
+          purchase_order_item: "POI-1",
+          item_code: "TRACTOR-6X4",
+          item_name: "6×4 Tractor Head",
+          description: "2026 tractor",
+          ordered_qty: 3,
+          received_qty: 1,
+          remaining_qty: 2,
+          qty: 2,
+          warehouse: "Vehicle Yard - AN",
+          is_vehicle_item: 1,
+        },
+      ];
+    else if (method === "get_vin_summary")
+      message = {
+        vin: "LZZ1CLVB0RA123456",
+        vehicle_master: "VM-TRUCK-001",
+        vehicle: "6×4 Tractor Head",
+        import_file: "VIF-2026-00009",
+        supplier: "Eastern Heavy Vehicles",
+        purchase_receipt: "PR-2026-00054",
+        vehicle_master_status: "Created",
+        receiving_status: "Received",
+        sale_status: "Available",
+        current_location: "Vehicle Yard - AN",
+        vehicle_status: "Available",
+      };
+    else if (
+      [
+        "create_purchase_order",
+        "create_purchase_receipt",
+        "create_landed_cost_voucher",
+        "complete_vehicle_information",
+      ].includes(method)
+    ) {
+      assert.equal(req.headers["x-frappe-csrf-token"], "fixture-token");
+      message = { name: "CREATED-001", docstatus: 1 };
     } else if (method === "search")
       message = [
         { doctype: "Customer", name: "Customer-001", label: "Al Noor Motors" },
@@ -390,6 +609,102 @@ const server = http.createServer(async (req, res) => {
       await goto(route);
       await page.getByText("EXISTING-001", { exact: true }).waitFor();
     }
+    await page.setViewportSize({ width: 1920, height: 1080 });
+    await goto("/import-files/VIF-2026-00009");
+    await page.getByText("October Tractor Shipment", { exact: true }).waitFor();
+    await page.screenshot({
+      path: "/tmp/an-truck-import-workspace-en.png",
+      fullPage: true,
+    });
+    await page.getByRole("button", { name: "Language", exact: true }).click();
+    assert.equal(await page.locator("html").getAttribute("dir"), "rtl");
+    await page.screenshot({
+      path: "/tmp/an-truck-import-workspace-ar.png",
+      fullPage: true,
+    });
+    await page.getByRole("button", { name: "اللغة", exact: true }).click();
+    await page
+      .getByRole("button", { name: /Receive another batch/i })
+      .first()
+      .click();
+    const receiveDialog = page.getByRole("dialog", {
+      name: /Receive vehicles/i,
+    });
+    await receiveDialog.waitFor();
+    assert.equal(await receiveDialog.locator(".vin-grid input").count(), 2);
+    await page.screenshot({
+      path: "/tmp/an-truck-import-receiving-vin.png",
+      fullPage: true,
+    });
+    await receiveDialog.screenshot({
+      path: "/tmp/an-truck-import-receiving.png",
+    });
+    await receiveDialog.locator(".vin-entry").screenshot({
+      path: "/tmp/an-truck-import-vin-entry.png",
+    });
+    await receiveDialog
+      .locator(".vin-grid input")
+      .nth(0)
+      .fill("LZZ1CLVB0RA223456");
+    await receiveDialog
+      .locator(".vin-grid input")
+      .nth(1)
+      .fill("LZZ1CLVB0RA323456");
+    await receiveDialog
+      .getByRole("button", { name: "Submit receipt", exact: true })
+      .click();
+    await receiveDialog.waitFor({ state: "hidden" });
+    assert.ok(requests.includes("create_purchase_receipt"));
+    await page
+      .getByRole("button", { name: /Add import cost/i })
+      .first()
+      .click();
+    const costDialog = page.getByRole("dialog", { name: /Add import cost/i });
+    await costDialog.waitFor();
+    await page.screenshot({
+      path: "/tmp/an-truck-import-costs.png",
+      fullPage: true,
+    });
+    await costDialog.getByLabel("Supplier / Payee").fill("Dubai Customs");
+    await costDialog.getByLabel("Amount", { exact: true }).fill("4500");
+    await costDialog.getByLabel("Expense account").fill("Customs Charges - AN");
+    await costDialog.getByLabel("Reference").fill("CUS-7781");
+    await costDialog
+      .getByRole("button", { name: "Create and submit", exact: true })
+      .click();
+    await costDialog.waitFor({ state: "hidden" });
+    assert.ok(requests.includes("create_landed_cost_voucher"));
+    await page.getByPlaceholder("Search by VIN...").fill("LZZ1CLVB0RA123456");
+    await page.getByPlaceholder("Search by VIN...").press("Enter");
+    await page.getByText("Open vehicle details", { exact: true }).waitFor();
+    assert.equal(await page.locator("tr.highlighted").count(), 1);
+    await page.getByText("Open vehicle details", { exact: true }).click();
+    const vehicleDialog = page.getByRole("dialog", {
+      name: /Vehicle details/i,
+    });
+    await vehicleDialog.waitFor();
+    await vehicleDialog.getByRole("button", { name: "Quick edit" }).click();
+    await vehicleDialog.getByLabel("Model").fill("A7 Pro Plus");
+    await vehicleDialog.getByRole("button", { name: "Save vehicle" }).click();
+    await page.getByText("Vehicle information updated successfully.").waitFor();
+    assert.ok(requests.includes("complete_vehicle_information"));
+    await vehicleDialog.getByRole("button", { name: "Close" }).click();
+    await goto("/import-files/VIF-NO-PO");
+    await page
+      .getByRole("button", { name: "Create Purchase Order", exact: true })
+      .first()
+      .click();
+    const purchaseDialog = page.getByRole("dialog", {
+      name: "Create Purchase Order",
+    });
+    await purchaseDialog.waitFor();
+    await purchaseDialog.getByLabel("Item").fill("TRACTOR-6X4");
+    await purchaseDialog.getByLabel("Warehouse").fill("Vehicle Yard - AN");
+    await purchaseDialog
+      .getByRole("button", { name: "Create and submit", exact: true })
+      .click();
+    await purchaseDialog.waitFor({ state: "hidden" });
+    assert.ok(requests.includes("create_purchase_order"));
     await goto("/customers");
     await page
       .getByRole("searchbox", {

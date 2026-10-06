@@ -2,6 +2,7 @@ import { createRouter, createWebHistory } from "vue-router";
 import Dashboard from "./views/Dashboard.vue";
 import Records from "./views/Records.vue";
 import Detail from "./views/Detail.vue";
+import ImportWorkspace from "./views/ImportWorkspace.vue";
 import Parties from "./views/Parties.vue";
 import PartyForm from "./views/PartyForm.vue";
 
@@ -27,7 +28,13 @@ const routes = [
 		props: true,
 	},
 	{
-		path: "/:resource(import-files|vehicles)/:name",
+		path: "/import-files/:name",
+		name: "import-workspace",
+		component: ImportWorkspace,
+		props: true,
+	},
+	{
+		path: "/:resource(vehicles)/:name",
 		name: "detail",
 		component: Detail,
 		props: true,
