@@ -12,6 +12,8 @@ const props = defineProps({
 	options: Array,
 	link: Object,
 	ltr: Boolean,
+	min: [String, Number],
+	step: [String, Number],
 	rows: { type: Number, default: 3 },
 });
 const emit = defineEmits(["update:modelValue"]);
@@ -39,10 +41,20 @@ async function search(value = "") {
 	if (!props.link || props.disabled) return;
 	const request = ++generation;
 	try {
-		const rows = await call("an_truck.portal_parties.link_options", {
-			...props.link,
-			search: value,
-		});
+		const rows = props.link.field
+			? await call("an_truck.portal_parties.link_options", {
+					...props.link,
+					search: value,
+				})
+			: (
+					await call("frappe.client.get_list", {
+						doctype: props.link.doctype,
+						fields: ["name"],
+						filters: { name: ["like", `%${value}%`] },
+						limit_page_length: 30,
+						order_by: "name asc",
+					})
+				).map((row) => row.name);
 		if (request === generation) {
 			suggestions.value = rows;
 			error.value = "";
@@ -62,6 +74,7 @@ onBeforeUnmount(() => {
 	clearTimeout(timer);
 	generation++;
 });
+defineExpose({ refresh: () => search(props.modelValue || "") });
 </script>
 <template>
 	<div class="form-field">
@@ -107,6 +120,8 @@ onBeforeUnmount(() => {
 			:value="modelValue"
 			:required="required"
 			:disabled="disabled"
+			:min="min"
+			:step="step"
 			:list="link ? `${id}-options` : undefined"
 			:aria-describedby="error ? `${id}-error` : undefined"
 			@focus="search(modelValue || '')"

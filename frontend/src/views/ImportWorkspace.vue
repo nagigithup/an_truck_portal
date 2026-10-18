@@ -1,6 +1,9 @@
 <script setup>
 import { computed, inject, nextTick, onMounted, ref } from "vue";
-import { call, __ } from "../api";
+import { call, uploadFile, __ } from "../api";
+import ConfirmDialog from "../components/ConfirmDialog.vue";
+import PurchaseOrderDialog from "../components/PurchaseOrderDialog.vue";
+import VehicleDrawer from "../components/VehicleDrawer.vue";
 
 const props = defineProps({ name: String });
 const { notification } = inject("portal");
@@ -13,17 +16,17 @@ const vinQuery = ref("");
 const vinSearching = ref(false);
 const vinResult = ref(undefined);
 const highlightedVin = ref("");
-const selectedVehicle = ref(null);
-const editingVehicle = ref(false);
-const vehicleDraft = ref({});
+const vehicleDrawer = ref(null);
 const options = ref(null);
 const purchaseDialog = ref(null);
 const receivingDialog = ref(null);
 const costDialog = ref(null);
+const closeFileConfirm = ref(null);
+const closeFileError = ref("");
 
-const purchaseForm = ref({ required_by_date: "", notes: "", items: [] });
 const receiptForm = ref({ purchase_order: "", posting_date: "", items: [], vins: [] });
 const costForm = ref({ posting_date: "", allocation_basis: "Qty", receipts: [], rows: [] });
+const costCreationResult = ref(null);
 const operationKey = ref("");
 
 const data = computed(() => workspace.value || {});
@@ -32,6 +35,8 @@ const permissions = computed(() => data.value.permissions || {});
 const canCreatePO = computed(() => data.value.next_actions?.includes("create_purchase_order"));
 const canReceive = computed(() => data.value.next_actions?.includes("receive_vehicles"));
 const canAddCost = computed(() => data.value.next_actions?.includes("add_import_cost"));
+const canCloseFile = computed(() => data.value.next_actions?.includes("close_import_file"));
+const isCompleted = computed(() => data.value.import_file?.status === "Completed");
 const submittedReceipts = computed(() =>
 	(data.value.documents?.purchase_receipts || []).filter((row) => row.docstatus === 1),
 );
@@ -79,6 +84,15 @@ function documentDoctype(group) {
 		delivery_notes: "Delivery Note",
 		sales_invoices: "Sales Invoice",
 		customer_payments: "Payment Entry",
+	}[group];
+}
+function documentRoute(group, name) {
+	return {
+		purchase_orders: { name: "purchase-order-detail", params: { name } },
+		purchase_receipts: { name: "purchase-receipt-detail", params: { name } },
+		purchase_invoices: { name: "purchase-invoice-detail", params: { name } },
+		supplier_payments: { name: "supplier-payment-detail", params: { name } },
+		landed_cost_vouchers: { name: "landed-cost-detail", params: { name } },
 	}[group];
 }
 async function load() {
@@ -129,43 +143,27 @@ async function runAction(name, method, args, dialog) {
 	}
 }
 
-async function openPurchase() {
-	const opts = await loadOptions();
-	purchaseForm.value = {
-		required_by_date: opts.today,
-		notes: "",
-		items: [{ item_code: "", item_name: "", qty: 1, rate: 0, uom: "", warehouse: "" }],
-	};
-	show(purchaseDialog);
-}
-function addPurchaseRow() {
-	purchaseForm.value.items.push({
-		item_code: "",
-		item_name: "",
-		qty: 1,
-		rate: 0,
-		uom: "",
-		warehouse: "",
-	});
-}
-function selectItem(row) {
-	const item = options.value?.items?.find((entry) => entry.name === row.item_code);
-	if (item) Object.assign(row, { item_name: item.item_name, uom: item.stock_uom });
-}
-function submitPurchase() {
-	if (
-		!purchaseForm.value.items.length ||
-		purchaseForm.value.items.some((row) => !row.item_code || Number(row.qty) <= 0)
-	) {
-		actionError.value = __("Enter an item and a positive quantity for every row.");
-		return;
+async function completeImportFile() {
+	if (busy.value || !(await closeFileConfirm.value?.ask())) return;
+	busy.value = "close-file";
+	closeFileError.value = "";
+	try {
+		await call(
+			"an_truck_portal.api.import_file.complete_import_file",
+			{ vehicle_import_file: props.name },
+			true,
+		);
+		notification.value = __("Vehicle Import File completed successfully.");
+		await load();
+	} catch (e) {
+		closeFileError.value = e.message || __("Unable to complete the operation");
+	} finally {
+		busy.value = "";
 	}
-	runAction(
-		"purchase",
-		"an_truck.transactions.create_purchase_order",
-		{ data: purchaseForm.value, submit_now: 1 },
-		purchaseDialog,
-	);
+}
+
+function openPurchase() {
+	purchaseDialog.value?.open();
 }
 
 async function openReceiving() {
@@ -237,7 +235,7 @@ function submitReceipt() {
 		return void (actionError.value = __("Duplicate VIN in this receipt."));
 	runAction(
 		"receipt",
-		"an_truck.transactions.create_purchase_receipt",
+		"an_truck_portal.api.import_file.create_purchase_receipt",
 		{
 			data: {
 				purchase_order: receiptForm.value.purchase_order,
@@ -253,6 +251,7 @@ function submitReceipt() {
 
 async function openCost() {
 	const opts = await loadOptions();
+	costCreationResult.value = null;
 	costForm.value = {
 		posting_date: opts.today,
 		allocation_basis: "Qty",
@@ -262,11 +261,11 @@ async function openCost() {
 				cost_type: "Customs",
 				supplier: "",
 				amount: 0,
-				currency: summary.value.currency,
 				expense_account: "",
-				exchange_rate: 1,
 				reference: "",
 				notes: "",
+				attachment: null,
+				attachment_uploaded: false,
 			},
 		],
 	};
@@ -277,12 +276,30 @@ function addCostRow() {
 		cost_type: "Other Direct Costs",
 		supplier: "",
 		amount: 0,
-		currency: summary.value.currency,
 		expense_account: "",
-		exchange_rate: 1,
 		reference: "",
 		notes: "",
+		attachment: null,
+		attachment_uploaded: false,
 	});
+}
+function selectCostAttachment(row, event) {
+	const file = event.target.files?.[0] || null;
+	if (
+		file &&
+		!["application/pdf", "image/jpeg", "image/png", "image/webp"].includes(file.type) &&
+		!/\.(pdf|jpe?g|png|webp)$/i.test(file.name)
+	) {
+		event.target.value = "";
+		row.attachment = null;
+		actionError.value = __(
+			"Unsupported file type. Upload a PDF, JPG, PNG, or WebP file.",
+		);
+		return;
+	}
+	row.attachment = file;
+	row.attachment_uploaded = false;
+	actionError.value = "";
 }
 function costDescription(row) {
 	return [
@@ -294,36 +311,78 @@ function costDescription(row) {
 		.filter(Boolean)
 		.join(" · ");
 }
-function submitCost() {
-	if (!costForm.value.receipts.length)
-		return void (actionError.value = __("Select at least one Purchase Receipt."));
-	if (
-		!costForm.value.rows.length ||
-		costForm.value.rows.some((row) => Number(row.amount) <= 0 || !row.expense_account)
-	)
-		return void (actionError.value = __(
-			"Enter a positive amount and expense account for every cost.",
-		));
-	const payload = {
-		posting_date: costForm.value.posting_date,
-		allocation_basis: costForm.value.allocation_basis,
-		purchase_receipts: costForm.value.receipts.map((receipt_document) => ({
-			receipt_document,
-		})),
-		taxes: costForm.value.rows.map((row) => ({
-			description: costDescription(row),
-			expense_account: row.expense_account,
-			amount: Number(row.amount),
-			currency: row.currency,
-			exchange_rate: Number(row.exchange_rate) || 1,
-		})),
-	};
-	runAction(
-		"cost",
-		"an_truck.transactions.create_landed_cost_voucher",
-		{ data: payload, submit_now: 1 },
-		costDialog,
-	);
+async function submitCost() {
+	if (busy.value) return;
+	if (!costCreationResult.value) {
+		if (!costForm.value.receipts.length)
+			return void (actionError.value = __("Select at least one Purchase Receipt."));
+		if (
+			!costForm.value.rows.length ||
+			costForm.value.rows.some((row) => Number(row.amount) <= 0 || !row.expense_account)
+		)
+			return void (actionError.value = __(
+				"Enter a positive amount and expense account for every cost.",
+			));
+	}
+	busy.value = "cost";
+	actionError.value = "";
+	try {
+		if (!costCreationResult.value) {
+			const payload = {
+				posting_date: costForm.value.posting_date,
+				allocation_basis: costForm.value.allocation_basis,
+				purchase_receipts: costForm.value.receipts.map((receipt_document) => ({
+					receipt_document,
+				})),
+				taxes: costForm.value.rows.map((row) => ({
+					description: costDescription(row),
+					expense_account: row.expense_account,
+					amount: Number(row.amount),
+					currency: "SAR",
+					exchange_rate: 1,
+				})),
+			};
+			costCreationResult.value = await call(
+				"an_truck_portal.api.import_file.create_landed_cost_voucher",
+				{
+					vehicle_import_file: props.name,
+					data: payload,
+					submit_now: 1,
+					idempotency_key: operationKey.value,
+				},
+				true,
+			);
+		}
+		for (const [index, row] of costForm.value.rows.entries()) {
+			if (!row.attachment || row.attachment_uploaded) continue;
+			const savedRow = costCreationResult.value.cost_rows?.find(
+				(entry) => Number(entry.idx) === index + 1,
+			);
+			if (!savedRow)
+				throw Error(__("Unable to link the attachment to cost row {0}.", [index + 1]));
+			try {
+				await uploadFile(row.attachment, "Landed Cost Taxes and Charges", savedRow.name, {
+					method: "an_truck_portal.api.import_file.upload_cost_attachment",
+					fields: { vehicle_import_file: props.name },
+				});
+				row.attachment_uploaded = true;
+			} catch (e) {
+				throw Error(__("Could not upload the attachment for cost row {0}: {1}", [
+					index + 1,
+					e.message || __("common.unexpected"),
+				]));
+			}
+		}
+		const result = costCreationResult.value;
+		costDialog.value?.close();
+		notification.value = __("Operation completed successfully: {0}", [result.name || ""]);
+		await load();
+		costCreationResult.value = null;
+	} catch (e) {
+		actionError.value = e.message || __("Unable to complete the operation");
+	} finally {
+		busy.value = "";
+	}
 }
 
 async function searchVin() {
@@ -345,43 +404,13 @@ async function searchVin() {
 	}
 }
 function openVehicle(vehicle) {
-	selectedVehicle.value = vehicle;
-	editingVehicle.value = false;
+	vehicleDrawer.value?.open(vehicle, false);
 }
-function startVehicleEdit() {
-	vehicleDraft.value = Object.fromEntries(
-		["brand", "model", "model_year", "color", "engine_number", "notes"].map((field) => [
-			field,
-			selectedVehicle.value?.[field] || "",
-		]),
-	);
-	editingVehicle.value = true;
+function editVehicle(vehicle) {
+	vehicleDrawer.value?.open(vehicle, true);
 }
-async function saveVehicle() {
-	if (busy.value || !selectedVehicle.value) return;
-	busy.value = "vehicle";
-	actionError.value = "";
-	try {
-		await call(
-			"an_truck.transactions.complete_vehicle_information",
-			{
-				vehicle_import_file: props.name,
-				data: {
-					vehicles: [{ name: selectedVehicle.value.name, ...vehicleDraft.value }],
-				},
-			},
-			true,
-		);
-		const name = selectedVehicle.value.name;
-		await load();
-		selectedVehicle.value = data.value.vehicles.find((row) => row.name === name);
-		editingVehicle.value = false;
-		notification.value = __("Vehicle information updated successfully.");
-	} catch (e) {
-		actionError.value = e.message || __("Unable to complete the operation");
-	} finally {
-		busy.value = "";
-	}
+async function vehicleSaved() {
+	await load();
 }
 
 onMounted(load);
@@ -450,12 +479,23 @@ onMounted(load);
 					</p>
 				</div>
 				<div class="workspace-status">
-					<span class="badge">{{ __(data.import_file.status) }}</span
+					<span class="badge" :class="{ success: isCompleted }">{{
+						__(data.import_file.status)
+					}}</span
 					><a
-						v-if="permissions['Vehicle Master']?.read"
+						v-if="permissions['Vehicle Import File']?.read"
 						class="button secondary small"
 						:href="desk('Vehicle Import File', name)"
 						>{{ __("Open in Desk") }}</a
+					><button
+						v-if="canCloseFile"
+						type="button"
+						class="button small"
+						:disabled="!!busy"
+						@click="completeImportFile"
+					>
+						{{ busy === "close-file" ? __("Processing...") : __("Close File") }}
+					</button
 					>
 				</div>
 				<div class="workspace-metrics">
@@ -493,6 +533,9 @@ onMounted(load);
 					</div>
 				</div>
 			</header>
+			<p v-if="closeFileError" class="form-error" role="alert">
+				{{ closeFileError }}
+			</p>
 
 			<section class="process panel" :aria-label="__('Process Status')">
 				<div
@@ -532,8 +575,12 @@ onMounted(load);
 					<div v-if="data.purchase.primary" class="compact-details">
 						<div>
 							<small>{{ __("PO Number") }}</small
-							><a :href="desk('Purchase Order', data.purchase.primary.name)"
-								><bdi>{{ data.purchase.primary.name }}</bdi></a
+							><router-link
+								:to="{
+									name: 'purchase-order-detail',
+									params: { name: data.purchase.primary.name },
+								}"
+								><bdi>{{ data.purchase.primary.name }}</bdi></router-link
 							>
 						</div>
 						<div>
@@ -621,9 +668,6 @@ onMounted(load);
 								<th>{{ __("Vehicle / Item") }}</th>
 								<th>{{ __("Model") }}</th>
 								<th>{{ __("Color") }}</th>
-								<th>{{ __("Purchase Receipt") }}</th>
-								<th>{{ __("Vehicle Master Status") }}</th>
-								<th>{{ __("Receiving Status") }}</th>
 								<th>{{ __("Landed Cost") }}</th>
 								<th>{{ __("Sales Status") }}</th>
 								<th>{{ __("Actions") }}</th>
@@ -631,7 +675,7 @@ onMounted(load);
 						</thead>
 						<tbody>
 							<tr v-if="!data.vehicles.length">
-								<td colspan="10" class="empty compact">
+								<td colspan="7" class="empty compact">
 									{{ __("No vehicles have been received yet.") }}
 								</td>
 							</tr>
@@ -649,22 +693,22 @@ onMounted(load);
 								<td>{{ vehicle.item_name || vehicle.item_code }}</td>
 								<td>{{ vehicle.model || "—" }}</td>
 								<td>{{ vehicle.color || "—" }}</td>
-								<td class="ltr">{{ vehicle.purchase_receipt || "—" }}</td>
-								<td>
-									<span class="badge neutral">{{
-										__(vehicle.vehicle_master_status)
-									}}</span>
-								</td>
-								<td>{{ __(vehicle.receiving_status) }}</td>
 								<td>
 									{{
 										amount(vehicle.final_valuation_rate, vehicle.cost_currency)
 									}}
 								</td>
 								<td>{{ __(vehicle.sales_status) }}</td>
-								<td>
+								<td class="row-actions">
 									<button class="text-button" @click="openVehicle(vehicle)">
 										{{ __("View") }}
+									</button>
+									<button
+										v-if="!isCompleted && permissions['Vehicle Master']?.write"
+										class="text-button"
+										@click="editVehicle(vehicle)"
+									>
+										{{ __("Edit") }}
 									</button>
 								</td>
 							</tr>
@@ -709,12 +753,13 @@ onMounted(load);
 								<th>{{ __("Currency") }}</th>
 								<th>{{ __("Date") }}</th>
 								<th>{{ __("Reference") }}</th>
+								<th>{{ __("Attachment") }}</th>
 								<th>{{ __("Document Status") }}</th>
 							</tr>
 						</thead>
 						<tbody>
 							<tr v-if="!data.costs.rows.length">
-								<td colspan="7" class="empty compact">
+								<td colspan="8" class="empty compact">
 									{{ __("No import costs have been added yet.") }}
 								</td>
 							</tr>
@@ -725,9 +770,22 @@ onMounted(load);
 								<td>{{ row.account_currency }}</td>
 								<td>{{ date(row.date) }}</td>
 								<td>
-									<a :href="desk('Landed Cost Voucher', row.voucher)"
-										><bdi>{{ row.voucher }}</bdi></a
+									<router-link :to="{ name: 'landed-cost-detail', params: { name: row.voucher } }"
+										><bdi>{{ row.voucher }}</bdi></router-link
 									>
+								</td>
+								<td>
+									<div v-if="row.attachments?.length" class="attachment-links">
+										<a
+											v-for="file in row.attachments"
+											:key="file.name"
+											:href="file.file_url"
+											target="_blank"
+											rel="noopener"
+											>{{ file.file_name }}</a
+										>
+									</div>
+									<span v-else>—</span>
 								</td>
 								<td>{{ docStatus(row) }}</td>
 							</tr>
@@ -745,7 +803,11 @@ onMounted(load);
 						<template v-for="(rows, group) in data.documents" :key="group"
 							><div v-for="row in rows" :key="`${group}-${row.name}`">
 								<span>{{ __(documentDoctype(group)) }}</span
-								><a :href="desk(documentDoctype(group), row.name)"
+								><router-link
+									v-if="documentRoute(group, row.name)"
+									:to="documentRoute(group, row.name)"
+									><bdi>{{ row.name }}</bdi></router-link
+								><a v-else :href="desk(documentDoctype(group), row.name)"
 									><bdi>{{ row.name }}</bdi></a
 								><small>{{ docStatus(row) }}</small>
 							</div></template
@@ -772,253 +834,15 @@ onMounted(load);
 			</div>
 		</template>
 
-		<div v-if="selectedVehicle" class="drawer-backdrop" @click.self="selectedVehicle = null">
-			<aside
-				class="vehicle-drawer"
-				role="dialog"
-				aria-modal="true"
-				:aria-label="__('Vehicle Details')"
-			>
-				<div class="drawer-head">
-					<div>
-						<p class="eyebrow">{{ __("Vehicle Details") }}</p>
-						<h2 class="ltr">{{ selectedVehicle.vin }}</h2>
-					</div>
-					<div class="drawer-actions">
-						<button
-							v-if="
-								!editingVehicle &&
-								permissions['Vehicle Import File']?.write &&
-								permissions['Vehicle Master']?.write
-							"
-							class="button secondary small"
-							@click="startVehicleEdit"
-						>
-							{{ __("Quick Edit") }}
-						</button>
-						<button
-							class="icon"
-							:aria-label="__('Close')"
-							@click="selectedVehicle = null"
-						>
-							×
-						</button>
-					</div>
-				</div>
-				<div class="drawer-body">
-					<div
-						v-for="field in [
-							['Vehicle Master', 'name'],
-							['Vehicle / Item', 'item_name'],
-							['Item Code', 'item_code'],
-							['Model', 'model'],
-							['Color', 'color'],
-							['Production Year', 'model_year'],
-							['Supplier', 'supplier'],
-							['Purchase Cost', 'purchase_valuation_rate'],
-							['Landed Cost Added', 'landed_cost_added'],
-							['Landed Cost', 'final_valuation_rate'],
-							['Purchase Receipt', 'purchase_receipt'],
-							['Import File', 'vehicle_import_file'],
-							['Inspection Status', 'inspection_status'],
-							['Warranty Status', 'warranty'],
-							['Sales Status', 'sales_status'],
-							['Current Location', 'warehouse'],
-						]"
-						:key="field[1]"
-					>
-						<small>{{ __(field[0]) }}</small
-						><b
-							:class="{
-								ltr: [
-									'name',
-									'item_code',
-									'purchase_receipt',
-									'vehicle_import_file',
-								].includes(field[1]),
-							}"
-							>{{
-								field[1] === "warranty"
-									? __(selectedVehicle.warranty?.status || "Not available")
-									: [
-												"purchase_valuation_rate",
-												"landed_cost_added",
-												"final_valuation_rate",
-										  ].includes(field[1])
-										? amount(
-												selectedVehicle[field[1]],
-												selectedVehicle.cost_currency,
-											)
-										: selectedVehicle[field[1]] || "—"
-							}}</b
-						>
-					</div>
-				</div>
-				<form v-if="editingVehicle" class="drawer-edit" @submit.prevent="saveVehicle">
-					<label
-						><span>{{ __("Brand") }}</span
-						><input v-model="vehicleDraft.brand"
-					/></label>
-					<label
-						><span>{{ __("Model") }}</span
-						><input v-model="vehicleDraft.model"
-					/></label>
-					<label
-						><span>{{ __("Production Year") }}</span
-						><input
-							v-model.number="vehicleDraft.model_year"
-							type="number"
-							min="1900"
-							max="2200"
-					/></label>
-					<label
-						><span>{{ __("Color") }}</span
-						><input v-model="vehicleDraft.color"
-					/></label>
-					<label
-						><span>{{ __("Engine Number") }}</span
-						><input v-model="vehicleDraft.engine_number" class="ltr"
-					/></label>
-					<label class="wide"
-						><span>{{ __("Notes") }}</span
-						><textarea v-model="vehicleDraft.notes" rows="3"></textarea>
-					</label>
-					<p v-if="actionError" class="form-error wide">{{ actionError }}</p>
-					<div class="drawer-edit-actions wide">
-						<button
-							type="button"
-							class="button secondary"
-							:disabled="!!busy"
-							@click="editingVehicle = false"
-						>
-							{{ __("Cancel") }}
-						</button>
-						<button class="button" :disabled="!!busy">
-							{{ busy === "vehicle" ? __("Saving…") : __("Save Vehicle") }}
-						</button>
-					</div>
-				</form>
-			</aside>
-		</div>
+		<VehicleDrawer ref="vehicleDrawer" @saved="vehicleSaved" />
 
-		<dialog
+		<PurchaseOrderDialog
 			ref="purchaseDialog"
-			class="operation-dialog"
-			:aria-label="__('Create Purchase Order')"
-			@cancel.prevent="close(purchaseDialog)"
-		>
-			<form @submit.prevent="submitPurchase">
-				<div class="dialog-head">
-					<div>
-						<p class="eyebrow">{{ __("Purchasing") }}</p>
-						<h2>{{ __("Create Purchase Order") }}</h2>
-					</div>
-					<button
-						type="button"
-						class="icon"
-						:aria-label="__('Close')"
-						@click="close(purchaseDialog)"
-					>
-						×
-					</button>
-				</div>
-				<div class="dialog-body">
-					<div class="form-grid">
-						<label
-							><span>{{ __("Supplier") }}</span
-							><input :value="data.import_file?.supplier" disabled /></label
-						><label
-							><span>{{ __("Currency") }}</span
-							><input :value="data.import_file?.supplier_currency" disabled /></label
-						><label
-							><span>{{ __("Required By Date") }}</span
-							><input
-								v-model="purchaseForm.required_by_date"
-								type="date"
-								required /></label
-						><label class="wide"
-							><span>{{ __("Notes") }}</span
-							><textarea v-model="purchaseForm.notes"></textarea>
-						</label>
-					</div>
-					<div class="dialog-section-head">
-						<h3>{{ __("Items") }}</h3>
-						<button
-							type="button"
-							class="button secondary small"
-							@click="addPurchaseRow"
-						>
-							{{ __("+ Add Item") }}
-						</button>
-					</div>
-					<div class="editable-grid purchase-items">
-						<div
-							v-for="(row, index) in purchaseForm.items"
-							:key="index"
-							class="edit-row"
-						>
-							<label
-								><span>{{ __("Item") }}</span
-								><input
-									v-model="row.item_code"
-									list="item-options"
-									required
-									@change="selectItem(row)" /></label
-							><label
-								><span>{{ __("Quantity") }}</span
-								><input
-									v-model.number="row.qty"
-									type="number"
-									min="0.001"
-									step="any"
-									required /></label
-							><label
-								><span>{{ __("Rate") }}</span
-								><input
-									v-model.number="row.rate"
-									type="number"
-									min="0"
-									step="any" /></label
-							><label
-								><span>{{ __("Warehouse") }}</span
-								><input v-model="row.warehouse" list="warehouse-options" /></label
-							><button
-								type="button"
-								class="remove-row"
-								:aria-label="__('Delete')"
-								@click="purchaseForm.items.splice(index, 1)"
-							>
-								×
-							</button>
-						</div>
-					</div>
-					<datalist id="item-options">
-						<option v-for="item in options?.items" :value="item.name">
-							{{ item.item_name }}
-						</option></datalist
-					><datalist id="warehouse-options">
-						<option
-							v-for="warehouse in options?.warehouses"
-							:value="warehouse.name"
-						></option>
-					</datalist>
-					<p v-if="actionError" class="form-error">{{ actionError }}</p>
-				</div>
-				<div class="dialog-actions">
-					<button
-						type="button"
-						class="button secondary"
-						:disabled="!!busy"
-						@click="close(purchaseDialog)"
-					>
-						{{ __("Cancel") }}</button
-					><button class="button" :disabled="!!busy">
-						{{ busy === "purchase" ? __("Processing...") : __("Create and Submit") }}
-					</button>
-				</div>
-			</form>
-		</dialog>
-
+			:vehicle-import-file="name"
+			:supplier="data.import_file?.supplier"
+			:currency="data.import_file?.supplier_currency"
+			@created="load"
+		/>
 		<dialog
 			ref="receivingDialog"
 			class="operation-dialog wide-dialog"
@@ -1201,7 +1025,12 @@ onMounted(load);
 					</fieldset>
 					<div class="dialog-section-head">
 						<h3>{{ __("Additional Costs") }}</h3>
-						<button type="button" class="button secondary small" @click="addCostRow">
+						<button
+							type="button"
+							class="button secondary small"
+							:disabled="!!busy || !!costCreationResult"
+							@click="addCostRow"
+						>
 							{{ __("+ Add Cost") }}
 						</button>
 					</div>
@@ -1242,30 +1071,28 @@ onMounted(load);
 									step="any"
 									required /></label
 							><label
-								><span>{{ __("Currency") }}</span
-								><input v-model="row.currency" required /></label
-							><label
 								><span>{{ __("Expense Account") }}</span
 								><input
 									v-model="row.expense_account"
 									list="expense-options"
 									required /></label
 							><label
-								><span>{{ __("Exchange Rate") }}</span
-								><input
-									v-model.number="row.exchange_rate"
-									type="number"
-									min="0.000001"
-									step="any" /></label
-							><label
 								><span>{{ __("Reference") }}</span
 								><input v-model="row.reference" /></label
 							><label
 								><span>{{ __("Notes") }}</span
 								><input v-model="row.notes" /></label
+							><label class="cost-attachment"
+								><span>{{ __("Attachment") }}</span
+								><input
+									type="file"
+									accept=".pdf,.jpg,.jpeg,.png,.webp,application/pdf,image/jpeg,image/png,image/webp"
+									@change="selectCostAttachment(row, $event)" />
+								<small>{{ __("Supported files: PDF, JPG, PNG, WebP") }}</small></label
 							><button
 								type="button"
 								class="remove-row"
+								:disabled="!!busy || !!costCreationResult"
 								:aria-label="__('Delete')"
 								@click="costForm.rows.splice(index, 1)"
 							>
@@ -1302,5 +1129,12 @@ onMounted(load);
 				</div>
 			</form>
 		</dialog>
+		<ConfirmDialog
+			ref="closeFileConfirm"
+			title="Close Vehicle Import File"
+			message="This file will be marked as completed and no further changes will be allowed through AN Truck Portal."
+			cancel-label="Cancel"
+			confirm-label="Close File"
+		/>
 	</div>
 </template>

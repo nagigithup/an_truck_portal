@@ -1023,6 +1023,87 @@ td small {
 	box-shadow: 0 0 30px #14213d33;
 	overflow-y: auto;
 }
+.vehicle-editor-drawer {
+	width: min(860px, 96vw);
+}
+.vehicle-full-form {
+	padding: 16px 20px 84px;
+	background: #f9fafb;
+}
+.vehicle-form-section {
+	margin-bottom: 16px;
+	padding: 16px;
+	border: 1px solid var(--line);
+	border-radius: 8px;
+	background: white;
+}
+.vehicle-form-section h3 {
+	margin: 0 0 14px;
+	font-size: 15px;
+}
+.vehicle-form-grid {
+	display: grid;
+	grid-template-columns: repeat(2, minmax(0, 1fr));
+	gap: 14px;
+}
+.vehicle-form-grid .attachment-field,
+.vehicle-form-grid .vehicle-child-table {
+	grid-column: 1 / -1;
+}
+.attachment-field {
+	display: flex;
+	flex-direction: column;
+	align-items: flex-start;
+	gap: 7px;
+}
+.attachment-field > label,
+.checkbox-field label {
+	font-size: 12px;
+	font-weight: 600;
+	color: var(--muted);
+}
+.checkbox-field {
+	display: flex;
+	align-items: center;
+}
+.checkbox-field label {
+	display: flex;
+	align-items: center;
+	gap: 8px;
+}
+.checkbox-field input {
+	width: auto;
+}
+.vehicle-child-table {
+	padding: 12px;
+	border: 1px solid var(--line);
+	border-radius: 7px;
+	background: #f9fafb;
+}
+.vehicle-child-row {
+	display: grid;
+	grid-template-columns: repeat(2, minmax(0, 1fr)) auto;
+	align-items: end;
+	gap: 10px;
+	margin-top: 10px;
+	padding-top: 10px;
+	border-top: 1px solid var(--line);
+}
+.vehicle-form-actions {
+	position: sticky;
+	bottom: -1px;
+	margin: 20px -20px -84px;
+	padding: 14px 20px;
+	border-top: 1px solid var(--line);
+	background: white;
+}
+.readonly-note {
+	margin: 12px 20px 20px;
+	padding: 12px;
+	border-radius: 6px;
+	background: #f3f4f6;
+	color: var(--muted);
+}
 .drawer-head,
 .dialog-head {
 	display: flex;
@@ -1129,6 +1210,24 @@ td small {
 .dialog-body .form-grid .wide {
 	grid-column: span 2;
 }
+.create-import-grid {
+	grid-template-columns: repeat(2, minmax(0, 1fr));
+}
+.supplier-field-with-action {
+	display: grid;
+	grid-template-columns: minmax(0, 1fr) auto;
+	gap: 6px 10px;
+	align-items: end;
+}
+.supplier-field-with-action .form-field {
+	grid-column: 1 / -1;
+}
+.supplier-field-with-action .field-action {
+	grid-column: 2;
+	justify-self: end;
+	min-height: auto;
+	padding-block: 0;
+}
 .dialog-section-head {
 	display: flex;
 	justify-content: space-between;
@@ -1172,6 +1271,33 @@ td small {
 	grid-column: 5;
 	grid-row: 1 / span 2;
 	height: 100%;
+}
+.cost-attachment input[type="file"] {
+	width: 100%;
+	padding: 8px;
+}
+.document-attachment input[type="file"] {
+	width: 100%;
+	padding: 8px;
+}
+.cost-attachment small,
+.document-attachment small,
+.table-subtitle {
+	display: block;
+	color: var(--muted);
+}
+.detail-notes {
+	margin: 18px 0 0;
+	color: var(--muted);
+}
+.attachment-links {
+	display: flex;
+	flex-direction: column;
+	gap: 3px;
+	max-width: 220px;
+}
+.attachment-links a {
+	overflow-wrap: anywhere;
 }
 .remove-row {
 	width: 34px;
@@ -1336,6 +1462,10 @@ td small {
 	}
 }
 @media (max-width: 700px) {
+	.vehicle-form-grid,
+	.vehicle-child-row {
+		grid-template-columns: 1fr;
+	}
 	.top-header {
 		flex-wrap: wrap;
 		padding: 12px 16px;

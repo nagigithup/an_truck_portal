@@ -1,5 +1,5 @@
 <script setup>
-import { computed, inject, onBeforeUnmount, onMounted, ref, watch } from "vue";
+import { computed, inject, nextTick, onBeforeUnmount, onMounted, ref, watch } from "vue";
 import { call } from "../api";
 import { __ } from "../i18n";
 import PageHeader from "../components/PageHeader.vue";
@@ -12,6 +12,7 @@ import DataTable from "../components/DataTable.vue";
 import StatusBadge from "../components/StatusBadge.vue";
 import EmptyState from "../components/EmptyState.vue";
 import LoadingState from "../components/LoadingState.vue";
+import CreateSupplierDialog from "../components/CreateSupplierDialog.vue";
 const props = defineProps({ resource: String });
 const { ctx } = inject("portal");
 const doctype = computed(() => (props.resource === "customers" ? "Customer" : "Supplier"));
@@ -23,7 +24,8 @@ const rows = ref([]),
 	more = ref(false),
 	state = ref("loading"),
 	error = ref(""),
-	metadata = ref([]);
+	metadata = ref([]),
+	partyDialog = ref(null);
 const filterFields = computed(() =>
 	metadata.value.filter((f) =>
 		[prefix.value + "_group", prefix.value + "_type", "territory", "country"].includes(f.name),
@@ -76,7 +78,12 @@ function applyFilters() {
 	timer = setTimeout(load, 250);
 }
 watch([search, filters], applyFilters, { deep: true });
-onMounted(async () => {
+async function initialize() {
+	filters.value = {};
+	search.value = "";
+	page.value = 1;
+	state.value = "loading";
+	error.value = "";
 	try {
 		metadata.value = (
 			await call("an_truck.portal_parties.get_options", {
@@ -89,7 +96,14 @@ onMounted(async () => {
 		error.value = e.message;
 		state.value = "error";
 	}
-});
+}
+onMounted(initialize);
+watch(
+	() => props.resource,
+	(newResource, oldResource) => {
+		if (oldResource && newResource !== oldResource) initialize();
+	},
+);
 onBeforeUnmount(() => {
 	clearTimeout(timer);
 	generation++;
@@ -101,17 +115,27 @@ function move(delta) {
 function location(row) {
 	return `/${props.resource}/${encodeURIComponent(row.name)}`;
 }
+async function partyCreated(name) {
+	filters.value = {};
+	search.value = name;
+	page.value = 1;
+	await nextTick();
+	clearTimeout(timer);
+	await load();
+}
 </script>
 <template>
 	<div class="page">
 		<PageHeader
 			:title="__(resource === 'customers' ? 'Customers' : 'Suppliers')"
 			:subtitle="__('party.shared')"
-			><router-link
+			><button
 				v-if="ctx.permissions[doctype]?.create"
+				type="button"
 				class="button"
-				:to="`/${resource}/new`"
-				>+ {{ __(`New ${doctype}`) }}</router-link
+				@click="partyDialog.open()"
+			>
+				+ {{ __(`New ${doctype}`) }}</button
 			></PageHeader
 		>
 		<AppCard
@@ -160,11 +184,13 @@ function location(row) {
 				:message="
 					__(resource === 'customers' ? 'No customers found.' : 'No suppliers found.')
 				"
-				><router-link
+				><button
 					v-if="ctx.permissions[doctype]?.create"
+					type="button"
 					class="button"
-					:to="`/${resource}/new`"
-					>{{ __(`Add ${doctype}`) }}</router-link
+					@click="partyDialog.open()"
+				>
+					{{ __(`Add ${doctype}`) }}</button
 				></EmptyState
 			>
 			<DataTable
@@ -216,5 +242,10 @@ function location(row) {
 				</div>
 			</div>
 		</AppCard>
+		<CreateSupplierDialog
+			ref="partyDialog"
+			:doctype="doctype"
+			@created="partyCreated"
+		/>
 	</div>
 </template>

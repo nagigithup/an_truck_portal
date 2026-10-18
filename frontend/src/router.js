@@ -5,16 +5,18 @@ import Detail from "./views/Detail.vue";
 import ImportWorkspace from "./views/ImportWorkspace.vue";
 import Parties from "./views/Parties.vue";
 import PartyForm from "./views/PartyForm.vue";
+import PurchaseOrderDetail from "./views/PurchaseOrderDetail.vue";
+import PurchaseInvoiceDetail from "./views/PurchaseInvoiceDetail.vue";
+import PurchaseReceiptDetail from "./views/PurchaseReceiptDetail.vue";
+import SupplierPaymentDetail from "./views/SupplierPaymentDetail.vue";
+import LandedCostDetail from "./views/LandedCostDetail.vue";
+import SalesDocumentDetail from "./views/SalesDocumentDetail.vue";
+import VehicleDeliveryPrint from "./views/VehicleDeliveryPrint.vue";
 
 const routes = [
 	{ path: "/", name: "home", component: Dashboard, meta: { title: "Home" } },
 	{ path: "/:resource(customers|suppliers)", name: "parties", component: Parties, props: true },
-	{
-		path: "/:resource(customers|suppliers)/new",
-		name: "party-new",
-		component: PartyForm,
-		props: true,
-	},
+	{ path: "/:resource(customers|suppliers)/new", redirect: (to) => `/${to.params.resource}` },
 	{
 		path: "/:resource(customers|suppliers)/:name",
 		name: "party-detail",
@@ -32,6 +34,66 @@ const routes = [
 		name: "import-workspace",
 		component: ImportWorkspace,
 		props: true,
+	},
+	{
+		path: "/purchase-orders/:name",
+		name: "purchase-order-detail",
+		component: PurchaseOrderDetail,
+		props: true,
+	},
+	{
+		path: "/purchase-invoices/:name",
+		name: "purchase-invoice-detail",
+		component: PurchaseInvoiceDetail,
+		props: true,
+	},
+	{
+		path: "/purchase-receipts/:name",
+		name: "purchase-receipt-detail",
+		component: PurchaseReceiptDetail,
+		props: true,
+	},
+	{
+		path: "/supplier-payments/:name",
+		name: "supplier-payment-detail",
+		component: SupplierPaymentDetail,
+		props: true,
+	},
+	{
+		path: "/landed-costs/:name",
+		name: "landed-cost-detail",
+		component: LandedCostDetail,
+		props: true,
+	},
+	{
+		path: "/quotations/:name",
+		name: "quotation-detail",
+		component: SalesDocumentDetail,
+		props: (route) => ({ name: route.params.name, doctype: "Quotation" }),
+	},
+	{
+		path: "/sales-orders/:name",
+		name: "sales-order-detail",
+		component: SalesDocumentDetail,
+		props: (route) => ({ name: route.params.name, doctype: "Sales Order" }),
+	},
+	{
+		path: "/sales-invoices/:name",
+		name: "sales-invoice-detail",
+		component: SalesDocumentDetail,
+		props: (route) => ({ name: route.params.name, doctype: "Sales Invoice" }),
+	},
+	{
+		path: "/delivery-notes/:name/print",
+		name: "vehicle-delivery-print",
+		component: VehicleDeliveryPrint,
+		props: true,
+	},
+	{
+		path: "/customer-payments/:name",
+		name: "customer-payment-detail",
+		component: SupplierPaymentDetail,
+		props: (route) => ({ name: route.params.name, paymentKind: "customer" }),
 	},
 	{
 		path: "/:resource(vehicles)/:name",

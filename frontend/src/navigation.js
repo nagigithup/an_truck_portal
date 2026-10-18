@@ -19,7 +19,6 @@ export const navigation = [
 		label: "Vehicles",
 		items: [
 			["/vehicles", "Vehicle Master", "Vehicle Master"],
-			["/serials", "VIN and Serial Numbers", "Serial No"],
 			["/inspections", "Vehicle Inspections", "Quality Inspection"],
 		],
 	},
@@ -35,9 +34,20 @@ export const navigation = [
 	},
 ];
 export function recordLocation(record) {
+	if (
+		record.doctype === "Payment Entry" &&
+		record.payment_type === "Pay" &&
+		record.party_type === "Supplier"
+	) {
+		return { to: `/supplier-payments/${encodeURIComponent(record.name)}` };
+	}
 	const base = {
 		"Vehicle Master": "/vehicles",
 		"Vehicle Import File": "/import-files",
+		"Purchase Order": "/purchase-orders",
+		"Purchase Invoice": "/purchase-invoices",
+		"Purchase Receipt": "/purchase-receipts",
+		"Landed Cost Voucher": "/landed-costs",
 		Customer: "/customers",
 		Supplier: "/suppliers",
 	}[record.doctype];
