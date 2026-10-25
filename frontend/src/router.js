@@ -12,6 +12,11 @@ import SupplierPaymentDetail from "./views/SupplierPaymentDetail.vue";
 import LandedCostDetail from "./views/LandedCostDetail.vue";
 import SalesDocumentDetail from "./views/SalesDocumentDetail.vue";
 import VehicleDeliveryPrint from "./views/VehicleDeliveryPrint.vue";
+import WarrantyDashboard from "./views/WarrantyDashboard.vue";
+import WarrantyRecords from "./views/WarrantyRecords.vue";
+import WarrantyDetail from "./views/WarrantyDetail.vue";
+import WarrantyClaimDetail from "./views/WarrantyClaimDetail.vue";
+import WarrantyMasterDetail from "./views/WarrantyMasterDetail.vue";
 
 const routes = [
 	{ path: "/", name: "home", component: Dashboard, meta: { title: "Home" } },
@@ -95,6 +100,13 @@ const routes = [
 		component: SupplierPaymentDetail,
 		props: (route) => ({ name: route.params.name, paymentKind: "customer" }),
 	},
+	{ path: "/warranty-dashboard", name: "warranty-dashboard", component: WarrantyDashboard },
+	{ path: "/warranties", name: "warranties", component: WarrantyRecords, props: { resource: "warranties" } },
+	{ path: "/warranties/:name", name: "warranty-detail", component: WarrantyDetail, props: true },
+	{ path: "/warranty-claims", name: "warranty-claims", component: WarrantyRecords, props: { resource: "warranty-claims" } },
+	{ path: "/warranty-claims/:name", name: "warranty-claim-detail", component: WarrantyClaimDetail, props: true },
+	{ path: "/warranty/:resource(providers|provider-branches|provider-contracts|coverage-templates|coverage-categories)", name: "warranty-master", component: WarrantyRecords, props: true },
+	{ path: "/warranty/:resource(providers|provider-branches|provider-contracts|coverage-templates|coverage-categories)/:name", name: "warranty-master-detail", component: WarrantyMasterDetail, props: true },
 	{
 		path: "/:resource(vehicles)/:name",
 		name: "detail",

@@ -707,6 +707,49 @@ td small {
 	color: var(--muted);
 	margin-bottom: 5px;
 }
+.warranty-page {
+	display: grid;
+	gap: 18px;
+}
+.warranty-page > .page-head,
+.warranty-page > .workspace-header {
+	margin-bottom: 0;
+}
+.warranty-cards {
+	grid-template-columns: repeat(auto-fit, minmax(170px, 1fr));
+}
+.warranty-search {
+	flex: 2 !important;
+	min-width: 240px !important;
+}
+.wrap-cell {
+	white-space: normal;
+	min-width: 180px;
+	max-width: 360px;
+}
+.long-text {
+	white-space: pre-wrap;
+	overflow-wrap: anywhere;
+}
+.warranty-narrative {
+	margin-top: 0;
+}
+.warranty-narrative .section-card > p {
+	padding: 0 20px 18px;
+	margin-bottom: 0;
+}
+.warranty-documents > div {
+	padding: 14px 20px;
+	border-bottom: 1px solid var(--line);
+}
+.warranty-documents span,
+.warranty-documents small {
+	display: block;
+}
+.warranty-documents a {
+	display: inline-block;
+	margin-block: 3px;
+}
 .workspace-page {
 	display: grid;
 	gap: 16px;
@@ -898,6 +941,15 @@ td small {
 }
 .section-head .eyebrow {
 	margin: 0 !important;
+}
+.branch-section-actions,
+.branch-row-actions {
+	display: flex;
+	align-items: center;
+	gap: 10px;
+}
+.branch-row-actions {
+	white-space: nowrap;
 }
 .compact-details {
 	display: grid;

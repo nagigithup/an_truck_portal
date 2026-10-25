@@ -4,6 +4,7 @@ import IconShip from "~icons/lucide/ship";
 import IconTruck from "~icons/lucide/truck";
 import IconShopping from "~icons/lucide/shopping-cart";
 import IconUsers from "~icons/lucide/users";
+import IconShield from "~icons/lucide/shield-check";
 import IconClose from "~icons/lucide/x";
 import { navigation } from "../navigation";
 import { __ } from "../i18n";
@@ -11,7 +12,7 @@ const props = defineProps({ open: Boolean, ctx: Object });
 const emit = defineEmits(["close"]);
 const sidebar = ref(null),
 	closeButton = ref(null);
-const icons = [IconShip, IconShopping, IconUsers];
+const icons = [IconShip, IconShopping, IconUsers, IconShield];
 const itemIcons = { "/vehicles": IconTruck };
 const groups = computed(() =>
 	navigation

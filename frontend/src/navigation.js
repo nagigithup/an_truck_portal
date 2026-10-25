@@ -26,6 +26,18 @@ export const navigation = [
 			["/customer-payments", "Customer Payments", "Payment Entry"],
 		],
 	},
+	{
+		label: "Warranty",
+		items: [
+			["/warranty-dashboard", "Warranty Dashboard", "Warranty Claim"],
+			["/warranties", "Vehicle Warranties", "Vehicle Warranty"],
+			["/warranty-claims", "Warranty Claims", "Warranty Claim"],
+			["/warranty/providers", "Warranty Providers", "Warranty Provider"],
+			["/warranty/provider-contracts", "Provider Contracts", "Warranty Provider Contract"],
+			["/warranty/coverage-templates", "Coverage Templates", "Warranty Coverage Template"],
+			["/warranty/coverage-categories", "Coverage Categories", "Warranty Coverage Category"],
+		],
+	},
 ];
 export function recordLocation(record) {
 	if (
