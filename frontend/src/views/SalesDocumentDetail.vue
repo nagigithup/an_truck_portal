@@ -1,12 +1,14 @@
 <script setup>
-import { computed, onMounted, ref, watch } from "vue";
+import { computed, inject, onMounted, ref, watch } from "vue";
 import { call, __ } from "../api";
 import SalesDocumentDialog from "../components/SalesDocumentDialog.vue";
 import SupplierPaymentDialog from "../components/SupplierPaymentDialog.vue";
 import VehicleDeliveryDialog from "../components/VehicleDeliveryDialog.vue";
 import DocumentPrintDialog from "../components/DocumentPrintDialog.vue";
+import WarrantyDialog from "../components/WarrantyDialog.vue";
 
-const props = defineProps({ name: String, doctype: String });
+const props = defineProps({ name: String, doctype: String, spareParts: Boolean });
+const { notification } = inject("portal");
 const state = ref("loading");
 const error = ref("");
 const result = ref(null);
@@ -14,8 +16,9 @@ const nextDialog = ref(null);
 const paymentDialog = ref(null);
 const deliveryDialog = ref(null);
 const printDialog = ref(null);
+const warrantyDialog = ref(null);
 const salesDocument = computed(() => result.value?.document || {});
-const listRoute = computed(() => ({
+const listRoute = computed(() => props.spareParts ? "/spare-parts/sales" : ({
 	Quotation: "/quotations",
 	"Sales Order": "/sales-orders",
 	"Sales Invoice": "/sales-invoices",
@@ -66,8 +69,8 @@ async function load(silent = false) {
 	if (!silent) state.value = "loading";
 	error.value = "";
 	try {
-		const response = await call("an_truck_portal.api.sales.get_sales_document", {
-			doctype: props.doctype,
+		const response = await call(props.spareParts ? "an_truck_portal.api.spare_parts_sales.get_invoice" : "an_truck_portal.api.sales.get_sales_document", {
+			doctype: props.spareParts ? undefined : props.doctype,
 			document: props.name,
 		});
 		if (!response?.document) throw new Error(__("Unable to load document details."));
@@ -89,6 +92,16 @@ async function load(silent = false) {
 	}
 }
 
+async function submitSparePartsInvoice() {
+	try {
+		await call("an_truck_portal.api.spare_parts_sales.submit_invoice", { document: props.name }, true);
+		notification.value = __("Sales Invoice submitted successfully.");
+		await load(true);
+	} catch (e) {
+		error.value = e.message;
+	}
+}
+
 onMounted(load);
 watch([() => props.name, () => props.doctype], () => load());
 </script>
@@ -104,11 +117,13 @@ watch([() => props.name, () => props.doctype], () => load());
 					<h1><bdi>{{ salesDocument.name }}</bdi></h1>
 					<div class="page-actions detail-actions">
 						<router-link class="button secondary small" :to="listRoute">{{ __(`Back to ${doctype}s`) }}</router-link>
-						<button v-if="result.can_create_next" type="button" class="button small" @click="nextDialog.open()">{{ __(`+ Create ${result.next_doctype}`) }}</button>
+						<button v-if="spareParts && salesDocument.docstatus === 0 && result.can_submit" type="button" class="button small" @click="submitSparePartsInvoice">{{ __("Submit") }}</button>
+						<button v-if="!spareParts && result.can_create_next" type="button" class="button small" @click="nextDialog.open()">{{ __(`+ Create ${result.next_doctype}`) }}</button>
 						<button v-if="result.can_record_payment" type="button" class="button small" @click="paymentDialog.open()">{{ __("+ Record Payment") }}</button>
-						<button v-if="result.can_deliver_vehicle" type="button" class="button small" @click="deliveryDialog.open()">{{ __("Deliver Vehicle") }}</button>
+						<button v-if="!spareParts && result.can_deliver_vehicle" type="button" class="button small" @click="deliveryDialog.open()">{{ __("Deliver Vehicle") }}</button>
+						<button v-if="!spareParts && doctype === 'Sales Invoice' && result.warranty_context?.vehicles?.length && (result.warranty_context.can_create || result.warranty_context.vehicles.some((row) => row.existing_warranty))" type="button" class="button small" @click="warrantyDialog.open()">{{ __(result.warranty_context.can_create && result.warranty_context.vehicles.some((row) => !row.existing_warranty) ? 'Add Warranty / إضافة ضمان' : 'View Warranty') }}</button>
 						<button
-							v-else-if="(doctype === 'Sales Order' || doctype === 'Sales Invoice') && salesDocument.docstatus === 1"
+							v-else-if="!spareParts && (doctype === 'Sales Order' || doctype === 'Sales Invoice') && salesDocument.docstatus === 1"
 							type="button"
 							class="button small"
 							:aria-label="__('Deliver Vehicle')"
@@ -118,7 +133,7 @@ watch([() => props.name, () => props.doctype], () => load());
 							{{ __("Deliver Vehicle") }}
 						</button>
 						<button type="button" class="button secondary small" @click="printDialog.open()">{{ __("Print") }}</button>
-						<a class="button secondary small" :href="result.desk_url" target="_blank" rel="noopener">{{ __("Open in Desk") }}</a>
+						<a v-if="!spareParts" class="button secondary small" :href="result.desk_url" target="_blank" rel="noopener">{{ __("Open in Desk") }}</a>
 					</div>
 					<p v-if="result.delivery_block_reason" class="notice compact" role="status">
 						{{ __(result.delivery_block_reason) }}
@@ -128,6 +143,7 @@ watch([() => props.name, () => props.doctype], () => load());
 					<div><small>{{ __("Status") }}</small><span class="badge neutral">{{ status(salesDocument) }}</span></div>
 					<div><small>{{ __("Customer") }}</small><b>{{ salesDocument.customer_name || salesDocument.customer }}</b></div>
 					<div><small>{{ __("Company") }}</small><b>{{ salesDocument.company }}</b></div>
+					<div v-if="spareParts"><small>{{ __("Price List") }}</small><b>{{ salesDocument.selling_price_list }}</b></div>
 					<div><small>{{ __(salesDocument.posting_date ? "Posting Date" : "Transaction Date") }}</small><b>{{ date(salesDocument.posting_date || salesDocument.transaction_date) }}</b></div>
 					<div><small>{{ __(doctype === "Quotation" ? "Valid Till" : doctype === "Sales Order" ? "Delivery Date" : "Due Date") }}</small><b>{{ date(salesDocument.valid_till || salesDocument.delivery_date || salesDocument.due_date) }}</b></div>
 					<div><small>{{ __("Grand Total") }}</small><b>{{ amount(salesDocument.grand_total) }}</b></div>
@@ -178,6 +194,7 @@ watch([() => props.name, () => props.doctype], () => load());
 				@confirmed="load(true)"
 			/>
 			<DocumentPrintDialog ref="printDialog" :doctype="doctype" :document-name="salesDocument.name" />
+			<WarrantyDialog v-if="doctype === 'Sales Invoice' && result.warranty_context" ref="warrantyDialog" :sales-invoice="salesDocument.name" :context="result.warranty_context" @created="load(true)" />
 		</template>
 	</div>
 </template>

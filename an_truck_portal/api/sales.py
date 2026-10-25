@@ -723,6 +723,10 @@ def get_sales_document(doctype, document):
 			delivery_block_reason = _("Not permitted to create and submit Delivery Note.")
 		else:
 			can_deliver_vehicle = True
+	warranty_context = None
+	if doctype == "Sales Invoice" and frappe.has_permission("Vehicle Warranty", "read"):
+		from an_truck.warranty.workflow import get_invoice_warranty_context
+		warranty_context = get_invoice_warranty_context(doc.name)
 	return {
 		"document": {
 			"doctype": doctype,
@@ -759,9 +763,11 @@ def get_sales_document(doctype, document):
 			and not _completed_import_file(doc)
 			and frappe.has_permission("Payment Entry", "create")
 		),
+		"can_submit": bool(doc.docstatus == 0 and doc.has_permission("submit")),
 		"vehicle_deliveries": vehicle_deliveries,
 		"can_deliver_vehicle": can_deliver_vehicle,
 		"delivery_block_reason": delivery_block_reason,
+		"warranty_context": warranty_context,
 		"desk_url": f"/app/{frappe.scrub(doctype).replace('_', '-')}/{quote(doc.name)}",
 	}
 
