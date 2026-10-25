@@ -1,6 +1,5 @@
 <script setup>
 import { computed, ref, watch, nextTick } from "vue";
-import IconHome from "~icons/lucide/layout-dashboard";
 import IconShip from "~icons/lucide/ship";
 import IconTruck from "~icons/lucide/truck";
 import IconShopping from "~icons/lucide/shopping-cart";
@@ -12,7 +11,8 @@ const props = defineProps({ open: Boolean, ctx: Object });
 const emit = defineEmits(["close"]);
 const sidebar = ref(null),
 	closeButton = ref(null);
-const icons = [IconHome, IconShip, IconShopping, IconTruck, IconUsers];
+const icons = [IconShip, IconShopping, IconUsers];
+const itemIcons = { "/vehicles": IconTruck };
 const groups = computed(() =>
 	navigation
 		.map((group, i) => ({
@@ -74,7 +74,7 @@ function trap(event) {
 		</div>
 		<nav :aria-label="__('Main navigation')">
 			<div v-for="group in groups" :key="group.label" class="nav-group">
-				<p class="nav-label">{{ __(group.label) }}</p>
+				<p v-if="!group.hideLabel" class="nav-label">{{ __(group.label) }}</p>
 				<router-link
 					v-for="item in group.items"
 					:key="item[0]"
@@ -85,7 +85,7 @@ function trap(event) {
 								? $route.path === '/'
 								: $route.path === item[0] || $route.path.startsWith(`${item[0]}/`),
 					}"
-					><component :is="group.icon" aria-hidden="true" /><span>{{
+					><component :is="itemIcons[item[0]] || group.icon" aria-hidden="true" /><span>{{
 						__(item[1])
 					}}</span></router-link
 				>

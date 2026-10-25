@@ -1,8 +1,11 @@
 export const navigation = [
-	{ label: "Dashboard", items: [["/", "Home"]] },
 	{
 		label: "Import Management",
-		items: [["/import-files", "Vehicle Import Files", "Vehicle Import File"]],
+		hideLabel: true,
+		items: [
+			["/import-files", "Vehicle Import Files", "Vehicle Import File"],
+			["/vehicles", "Vehicle Master", "Vehicle Master"],
+		],
 	},
 	{
 		label: "Purchasing",
@@ -11,15 +14,6 @@ export const navigation = [
 			["/purchase-orders", "Purchase Orders", "Purchase Order"],
 			["/purchase-receipts", "Purchase Receipts", "Purchase Receipt"],
 			["/purchase-invoices", "Purchase Invoices", "Purchase Invoice"],
-			["/supplier-payments", "Supplier Payments", "Payment Entry"],
-			["/landed-costs", "Landed Cost Vouchers", "Landed Cost Voucher"],
-		],
-	},
-	{
-		label: "Vehicles",
-		items: [
-			["/vehicles", "Vehicle Master", "Vehicle Master"],
-			["/inspections", "Vehicle Inspections", "Quality Inspection"],
 		],
 	},
 	{
