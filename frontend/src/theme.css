@@ -1126,6 +1126,32 @@ td small {
 .checkbox-field input {
 	width: auto;
 }
+.center-tabs {
+	display: flex;
+	gap: 4px;
+	margin: 18px 0;
+	padding: 6px;
+}
+.center-tabs button {
+	border: 0;
+	background: transparent;
+	padding: 10px 16px;
+	border-radius: 6px;
+	color: var(--muted);
+	font-weight: 600;
+}
+.center-tabs button.active {
+	background: var(--primary-soft);
+	color: var(--nav);
+}
+.spare-sale-row {
+	grid-template-columns: 1.1fr 1.5fr 1fr 0.7fr 0.8fr 1fr auto;
+}
+.spare-sale-totals {
+	margin-top: 18px;
+	border: 1px solid var(--line);
+	border-radius: 7px;
+}
 .vehicle-child-table {
 	padding: 12px;
 	border: 1px solid var(--line);
@@ -1309,6 +1335,38 @@ td small {
 	padding: 10px;
 	background: var(--paper);
 	border-radius: var(--radius);
+}
+.sales-item-row {
+	grid-template-columns: repeat(12, minmax(0, 1fr)) 42px;
+	grid-template-areas:
+		"vin vin vin vin vin name name name name name quantity quantity remove"
+		"description description description description description rate rate warehouse warehouse code code . remove";
+	align-items: start;
+}
+.sales-item-vin {
+	grid-area: vin;
+}
+.sales-item-name {
+	grid-area: name;
+}
+.sales-item-quantity {
+	grid-area: quantity;
+}
+.sales-item-description {
+	grid-area: description;
+}
+.sales-item-rate {
+	grid-area: rate;
+}
+.sales-item-warehouse {
+	grid-area: warehouse;
+}
+.sales-item-code {
+	grid-area: code;
+}
+.sales-item-row .remove-row {
+	grid-area: remove;
+	align-self: end;
 }
 .cost-edit-row {
 	display: grid;
@@ -1601,12 +1659,33 @@ td small {
 	.cost-edit-row {
 		grid-template-columns: 1fr;
 	}
+	.sales-item-row {
+		grid-template-areas:
+			"vin"
+			"name"
+			"quantity"
+			"description"
+			"rate"
+			"warehouse"
+			"code"
+			"remove";
+	}
 	.cost-edit-row .remove-row {
 		grid-column: 1;
 		grid-row: auto;
 	}
 	.remove-row {
 		width: 100%;
+	}
+}
+@media (min-width: 701px) and (max-width: 980px) {
+	.sales-item-row {
+		grid-template-columns: repeat(2, minmax(0, 1fr)) 42px;
+		grid-template-areas:
+			"vin name remove"
+			"quantity description remove"
+			"rate warehouse remove"
+			"code code remove";
 	}
 }
 @media (min-width: 768px) and (max-width: 1199px) {

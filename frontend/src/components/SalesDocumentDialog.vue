@@ -245,13 +245,14 @@ defineExpose({ open });
 					<label class="wide document-attachment"><span>{{ __("Document Attachment") }}</span><input type="file" accept=".pdf,.jpg,.jpeg,.png,.webp,application/pdf,image/jpeg,image/png,image/webp" :disabled="attachmentUploaded" @change="chooseAttachment" /><small>{{ __("Supported files: PDF, JPG, PNG, WebP") }}</small></label>
 				</div>
 				<div class="dialog-section-head"><h3>{{ __("Items") }}</h3><button type="button" class="button secondary small" :disabled="!!creationResult" @click="form.items.push(blankItem())">{{ __("+ Add Item") }}</button></div>
-				<div class="editable-grid purchase-items"><div v-for="(row, index) in form.items || []" :key="row.source_item || index" class="edit-row">
-					<label><span>{{ __("VIN / Chassis Number") }}</span><input v-model="row.vehicle_master" list="sales-vehicle-options" :disabled="!!creationResult" @change="selectVehicle(row)" /><small v-if="row.vehicle_info || row.vin" class="table-subtitle">{{ row.vehicle_info || row.vin }}</small></label>
-					<label><span>{{ __("Item") }}</span><input v-model="row.item_code" list="sales-item-options" required :disabled="!!row.source_item || !!row.vehicle_master || !!creationResult" @change="selectItem(row)" /></label>
-					<label><span>{{ __("Description") }}</span><input v-model="row.description" :disabled="!!creationResult" /></label>
-					<label><span>{{ __("Quantity") }}</span><input v-model.number="row.qty" type="number" min="0" :max="row.max_qty" step="any" required :disabled="!!creationResult" /></label>
-					<label><span>{{ __("Rate") }}</span><input v-model.number="row.rate" type="number" min="0" step="any" required :disabled="!!creationResult" /></label>
-					<label><span>{{ __("Warehouse") }}</span><input v-model="row.warehouse" :disabled="!!creationResult" /></label>
+				<div class="editable-grid purchase-items"><div v-for="(row, index) in form.items || []" :key="row.source_item || index" class="edit-row sales-item-row">
+					<label class="sales-item-vin"><span>{{ __("VIN / Chassis Number") }}</span><input v-model="row.vehicle_master" list="sales-vehicle-options" :disabled="!!creationResult" @change="selectVehicle(row)" /><small v-if="row.vehicle_info || row.vin" class="table-subtitle">{{ row.vehicle_info || row.vin }}</small></label>
+					<label class="sales-item-name"><span>{{ __("Item Name") }}</span><input v-model="row.item_name" disabled /></label>
+					<label class="sales-item-quantity"><span>{{ __("Quantity") }}</span><input v-model.number="row.qty" type="number" min="0" :max="row.max_qty" step="any" required :disabled="!!creationResult" /></label>
+					<label class="sales-item-description"><span>{{ __("Description") }}</span><input v-model="row.description" :disabled="!!creationResult" /></label>
+					<label class="sales-item-rate"><span>{{ __("Rate") }}</span><input v-model.number="row.rate" type="number" min="0" step="any" required :disabled="!!creationResult" /></label>
+					<label class="sales-item-warehouse"><span>{{ __("Warehouse") }}</span><input v-model="row.warehouse" :disabled="!!creationResult" /></label>
+					<label class="sales-item-code"><span>{{ __("Item Code") }}</span><input v-model="row.item_code" list="sales-item-options" required :disabled="!!row.source_item || !!row.vehicle_master || !!creationResult" @change="selectItem(row)" /></label>
 					<button type="button" class="remove-row" :disabled="!!creationResult" :aria-label="__('Delete')" @click="form.items.splice(index, 1)">×</button>
 				</div></div>
 				<datalist id="sales-vehicle-options"><option v-for="vehicle in source?.vehicle_options || []" :key="vehicle.name" :value="vehicle.name">{{ vehicle.vin || vehicle.chassis_number }} · {{ vehicle.item_name }} · {{ __(vehicle.vehicle_status) }}</option></datalist>

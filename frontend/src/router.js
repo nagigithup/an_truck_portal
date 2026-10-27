@@ -17,6 +17,11 @@ import WarrantyRecords from "./views/WarrantyRecords.vue";
 import WarrantyDetail from "./views/WarrantyDetail.vue";
 import WarrantyClaimDetail from "./views/WarrantyClaimDetail.vue";
 import WarrantyMasterDetail from "./views/WarrantyMasterDetail.vue";
+import SparePartItems from "./views/SparePartItems.vue";
+import SparePartStock from "./views/SparePartStock.vue";
+import SparePartsSales from "./views/SparePartsSales.vue";
+import MaintenanceCenters from "./views/MaintenanceCenters.vue";
+import MaintenanceCenterDetail from "./views/MaintenanceCenterDetail.vue";
 
 const routes = [
 	{ path: "/", name: "home", component: Dashboard, meta: { title: "Home" } },
@@ -100,6 +105,12 @@ const routes = [
 		component: SupplierPaymentDetail,
 		props: (route) => ({ name: route.params.name, paymentKind: "customer" }),
 	},
+	{ path: "/spare-parts/items", name: "spare-parts-items", component: SparePartItems },
+	{ path: "/spare-parts/stock", name: "spare-parts-stock", component: SparePartStock },
+	{ path: "/spare-parts/sales", name: "spare-parts-sales", component: SparePartsSales },
+	{ path: "/spare-parts/sales/:name", name: "spare-parts-sale-detail", component: SalesDocumentDetail, props: (route) => ({ name: route.params.name, doctype: "Sales Invoice", spareParts: true }) },
+	{ path: "/maintenance-centers", name: "maintenance-centers", component: MaintenanceCenters },
+	{ path: "/maintenance-centers/:name", name: "maintenance-center-detail", component: MaintenanceCenterDetail, props: true },
 	{ path: "/warranty-dashboard", name: "warranty-dashboard", component: WarrantyDashboard },
 	{ path: "/warranties", name: "warranties", component: WarrantyRecords, props: { resource: "warranties" } },
 	{ path: "/warranties/:name", name: "warranty-detail", component: WarrantyDetail, props: true },

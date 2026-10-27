@@ -27,6 +27,15 @@ export const navigation = [
 		],
 	},
 	{
+		label: "Sales Management",
+		items: [
+			["/spare-parts/items", "Spare Parts Items", "Item"],
+			["/spare-parts/stock", "Spare Parts Stock", "Bin"],
+			["/spare-parts/sales", "Spare Parts Sales", "Sales Invoice"],
+			["/maintenance-centers", "Maintenance Centers", "Warranty Provider"],
+		],
+	},
+	{
 		label: "Warranty",
 		items: [
 			["/warranty-dashboard", "Warranty Dashboard", "Warranty Claim"],

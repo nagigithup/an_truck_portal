@@ -5,6 +5,7 @@ import IconTruck from "~icons/lucide/truck";
 import IconShopping from "~icons/lucide/shopping-cart";
 import IconUsers from "~icons/lucide/users";
 import IconShield from "~icons/lucide/shield-check";
+import IconPackage from "~icons/lucide/package";
 import IconClose from "~icons/lucide/x";
 import { navigation } from "../navigation";
 import { __ } from "../i18n";
@@ -12,14 +13,18 @@ const props = defineProps({ open: Boolean, ctx: Object });
 const emit = defineEmits(["close"]);
 const sidebar = ref(null),
 	closeButton = ref(null);
-const icons = [IconShip, IconShopping, IconUsers, IconShield];
+const icons = [IconShip, IconShopping, IconUsers, IconPackage, IconShield];
 const itemIcons = { "/vehicles": IconTruck };
 const groups = computed(() =>
 	navigation
 		.map((group, i) => ({
 			...group,
 			icon: icons[i],
-			items: group.items.filter((item) => !item[2] || props.ctx.permissions[item[2]]?.read),
+			items: group.items.filter(
+				(item) =>
+					item[0] !== "/warranty/provider-branches" &&
+					(!item[2] || props.ctx.permissions[item[2]]?.read),
+			),
 		}))
 		.filter((group) => group.items.length),
 );

@@ -5,6 +5,8 @@ import { call, uploadFile, __ } from "../api";
 const props = defineProps({
 	purchaseInvoice: { type: String, default: "" },
 	salesInvoice: { type: String, default: "" },
+	customer: { type: String, default: "" },
+	allowedInvoices: { type: Array, default: null },
 });
 const emit = defineEmits(["created"]);
 const { ctx, notification } = inject("portal");
@@ -20,10 +22,11 @@ const attachmentUploaded = ref(false);
 const operationKey = ref("");
 const invoices = ref([]);
 const selectedInvoice = ref("");
+const runtimeInvoice = ref("");
 
 const isCustomerPayment = computed(() => !props.purchaseInvoice);
 const invoiceDoctype = computed(() => (isCustomerPayment.value ? "Sales Invoice" : "Purchase Invoice"));
-const hasFixedInvoice = computed(() => !!props.purchaseInvoice || !!props.salesInvoice);
+const hasFixedInvoice = computed(() => !!props.purchaseInvoice || !!props.salesInvoice || !!runtimeInvoice.value);
 
 const selectedMode = computed(() =>
 	(source.value?.modes_of_payment || []).find((mode) => mode.name === form.value.mode_of_payment),
@@ -34,7 +37,7 @@ function key() {
 	return globalThis.crypto?.randomUUID?.() || `${Date.now()}-${Math.random()}`;
 }
 
-async function open() {
+async function open(invoice = "") {
 	error.value = "";
 	busy.value = false;
 	source.value = null;
@@ -45,7 +48,8 @@ async function open() {
 	operationKey.value = key();
 	form.value = {};
 	invoices.value = [];
-	selectedInvoice.value = props.salesInvoice || props.purchaseInvoice;
+	runtimeInvoice.value = invoice;
+	selectedInvoice.value = invoice || props.salesInvoice || props.purchaseInvoice;
 	dialog.value?.showModal();
 	try {
 		if (!hasFixedInvoice.value) {
@@ -53,9 +57,15 @@ async function open() {
 				doctype: "Sales Invoice",
 				company: ctx.company,
 				page_length: 100,
-				filters: { docstatus: 1, outstanding_amount: [">", 0] },
+				filters: {
+					docstatus: 1,
+					outstanding_amount: [">", 0],
+					...(props.customer ? { customer: props.customer } : {}),
+				},
 			});
-			invoices.value = result.rows || [];
+			invoices.value = props.allowedInvoices
+				? (result.rows || []).filter((row) => props.allowedInvoices.includes(row.name))
+				: (result.rows || []);
 			selectedInvoice.value = invoices.value.length === 1 ? invoices.value[0].name : "";
 		}
 		if (selectedInvoice.value) await loadSource();

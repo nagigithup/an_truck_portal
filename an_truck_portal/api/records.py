@@ -9,20 +9,151 @@ from frappe.model import get_permitted_fields
 from an_truck_portal.access import require_read
 
 ALLOWED = {
-	"Vehicle Import File": ["name","import_title","company","supplier","status","country_of_origin","contract_number","contract_date","supplier_currency","total_contract_amount","expected_arrival_date","port_of_destination","total_expected_vehicles","total_received_vehicles","total_remaining_vehicles","modified"],
-	"Vehicle Master": ["name","vin","chassis_number","company","item_code","item_name","vehicle_status","brand","model","model_year","color","vehicle_import_file","supplier","purchase_receipt","warehouse","customer","sales_order","sales_invoice","modified"],
-	"Purchase Order": ["name","company","supplier","transaction_date","currency","grand_total","status","docstatus","modified"],
-	"Purchase Receipt": ["name","company","supplier","posting_date","currency","grand_total","status","docstatus","modified"],
-	"Purchase Invoice": ["name","company","supplier","posting_date","currency","grand_total","outstanding_amount","status","docstatus","modified"],
-	"Supplier": ["name","supplier_name","supplier_group","country","disabled","modified"],
-	"Customer": ["name","customer_name","customer_group","territory","disabled","modified"],
-	"Quotation": ["name","company","party_name","customer_name","transaction_date","currency","grand_total","status","docstatus","modified"],
-	"Sales Order": ["name","company","customer","customer_name","transaction_date","currency","grand_total","status","docstatus","modified"],
-	"Sales Invoice": ["name","company","customer","customer_name","posting_date","currency","grand_total","outstanding_amount","status","docstatus","modified"],
-	"Payment Entry": ["name","company","payment_type","party_type","party","posting_date","paid_amount","received_amount","status","docstatus","modified"],
-	"Landed Cost Voucher": ["name","company","posting_date","total_taxes_and_charges","docstatus","modified"],
-	"Serial No": ["name","item_code","warehouse","status","modified"],
-	"Quality Inspection": ["name","inspection_type","reference_type","reference_name","item_code","sample_size","status","docstatus","modified"],
+	"Vehicle Import File": [
+		"name",
+		"import_title",
+		"company",
+		"supplier",
+		"status",
+		"country_of_origin",
+		"contract_number",
+		"contract_date",
+		"supplier_currency",
+		"total_contract_amount",
+		"expected_arrival_date",
+		"port_of_destination",
+		"total_expected_vehicles",
+		"total_received_vehicles",
+		"total_remaining_vehicles",
+		"modified",
+	],
+	"Vehicle Master": [
+		"name",
+		"vin",
+		"chassis_number",
+		"company",
+		"item_code",
+		"item_name",
+		"vehicle_status",
+		"brand",
+		"model",
+		"model_year",
+		"color",
+		"vehicle_import_file",
+		"supplier",
+		"purchase_receipt",
+		"warehouse",
+		"customer",
+		"sales_order",
+		"sales_invoice",
+		"modified",
+	],
+	"Purchase Order": [
+		"name",
+		"company",
+		"supplier",
+		"transaction_date",
+		"currency",
+		"grand_total",
+		"status",
+		"docstatus",
+		"modified",
+	],
+	"Purchase Receipt": [
+		"name",
+		"company",
+		"supplier",
+		"posting_date",
+		"currency",
+		"grand_total",
+		"status",
+		"docstatus",
+		"modified",
+	],
+	"Purchase Invoice": [
+		"name",
+		"company",
+		"supplier",
+		"posting_date",
+		"currency",
+		"grand_total",
+		"outstanding_amount",
+		"status",
+		"docstatus",
+		"modified",
+	],
+	"Supplier": ["name", "supplier_name", "supplier_group", "country", "disabled", "modified"],
+	"Customer": ["name", "customer_name", "customer_group", "territory", "disabled", "modified"],
+	"Quotation": [
+		"name",
+		"company",
+		"party_name",
+		"customer_name",
+		"transaction_date",
+		"currency",
+		"grand_total",
+		"status",
+		"docstatus",
+		"modified",
+	],
+	"Sales Order": [
+		"name",
+		"company",
+		"customer",
+		"customer_name",
+		"transaction_date",
+		"currency",
+		"grand_total",
+		"status",
+		"docstatus",
+		"modified",
+	],
+	"Sales Invoice": [
+		"name",
+		"company",
+		"customer",
+		"customer_name",
+		"posting_date",
+		"currency",
+		"grand_total",
+		"outstanding_amount",
+		"status",
+		"docstatus",
+		"modified",
+	],
+	"Payment Entry": [
+		"name",
+		"company",
+		"payment_type",
+		"party_type",
+		"party",
+		"posting_date",
+		"paid_amount",
+		"received_amount",
+		"status",
+		"docstatus",
+		"modified",
+	],
+	"Landed Cost Voucher": [
+		"name",
+		"company",
+		"posting_date",
+		"total_taxes_and_charges",
+		"docstatus",
+		"modified",
+	],
+	"Serial No": ["name", "item_code", "warehouse", "status", "modified"],
+	"Quality Inspection": [
+		"name",
+		"inspection_type",
+		"reference_type",
+		"reference_name",
+		"item_code",
+		"sample_size",
+		"status",
+		"docstatus",
+		"modified",
+	],
 }
 
 
@@ -37,20 +168,54 @@ def list_records(doctype, search=None, company=None, page=1, page_length=20, fil
 		fs["company"] = company
 	or_filters = None
 	if search:
-		search_fields = [f for f in ("name", "import_title", "vin", "supplier_name", "customer_name") if f == "name" or meta.has_field(f)]
+		search_fields = [
+			f
+			for f in ("name", "import_title", "vin", "supplier_name", "customer_name")
+			if f == "name" or meta.has_field(f)
+		]
 		or_filters = [[doctype, f, "like", f"%{search}%"] for f in search_fields]
-	rows = frappe.get_list(doctype, filters=fs, or_filters=or_filters, fields=ALLOWED[doctype], order_by="modified desc", start=(int(page)-1)*int(page_length), page_length=min(int(page_length),100))
+	rows = frappe.get_list(
+		doctype,
+		filters=fs,
+		or_filters=or_filters,
+		fields=ALLOWED[doctype],
+		order_by="modified desc",
+		start=(int(page) - 1) * int(page_length),
+		page_length=min(int(page_length), 100),
+	)
 	if doctype == "Vehicle Master":
 		import_files = {row.vehicle_import_file for row in rows if row.vehicle_import_file}
-		statuses = {
-			row.name: row.status
-			for row in frappe.get_all(
-				"Vehicle Import File",
-				filters={"name": ["in", list(import_files)]},
-				fields=["name", "status"],
-			)
-		} if import_files else {}
+		statuses = (
+			{
+				row.name: row.status
+				for row in frappe.get_all(
+					"Vehicle Import File",
+					filters={"name": ["in", list(import_files)]},
+					fields=["name", "status"],
+				)
+			}
+			if import_files
+			else {}
+		)
+		warranties = {}
+		if rows and frappe.has_permission("Vehicle Warranty", "read"):
+			for warranty in frappe.get_list(
+				"Vehicle Warranty",
+				filters={"vehicle_master": ["in", [row.name for row in rows]]},
+				fields=["name", "vehicle_master", "status", "warranty_expiry_date"],
+				order_by="warranty_start_date desc, modified desc",
+				page_length=0,
+			):
+				warranties.setdefault(
+					warranty.vehicle_master,
+					{
+						"name": warranty.name,
+						"status": warranty.status,
+						"expiry_date": warranty.warranty_expiry_date,
+					},
+				)
 		for row in rows:
+			row["warranty"] = warranties.get(row.name)
 			row["_can_edit"] = (
 				frappe.has_permission("Vehicle Master", "write", row.name)
 				and statuses.get(row.vehicle_import_file) != "Completed"
@@ -65,7 +230,10 @@ def get_record(doctype, name):
 	require_read(doctype)
 	doc = frappe.get_doc(doctype, name)
 	doc.check_permission("read")
-	return {"record": {f: doc.get(f) for f in ALLOWED[doctype]}, "desk_url": f"/app/{frappe.scrub(doctype).replace('_','-')}/{quote(name)}"}
+	return {
+		"record": {f: doc.get(f) for f in ALLOWED[doctype]},
+		"desk_url": f"/app/{frappe.scrub(doctype).replace('_', '-')}/{quote(name)}",
+	}
 
 
 def _vehicle_is_completed(doc):
@@ -189,9 +357,10 @@ def update_vehicle(vehicle_master, values=None):
 	_assert_vehicle_portal_write(doc)
 	values = frappe.parse_json(values) if isinstance(values, str) else (values or {})
 	target_import_file = values.get("vehicle_import_file")
-	if target_import_file and frappe.get_cached_value(
-		"Vehicle Import File", target_import_file, "status"
-	) == "Completed":
+	if (
+		target_import_file
+		and frappe.get_cached_value("Vehicle Import File", target_import_file, "status") == "Completed"
+	):
 		frappe.throw(
 			_("This Vehicle Import File is completed and is read-only in AN Truck Portal."),
 			frappe.PermissionError,
@@ -201,10 +370,7 @@ def update_vehicle(vehicle_master, values=None):
 		if (
 			field.hidden
 			or field.read_only
-			or (
-				field.fieldname not in write_fields
-				and field.fieldtype not in {"Table", "Table MultiSelect"}
-			)
+			or (field.fieldname not in write_fields and field.fieldtype not in {"Table", "Table MultiSelect"})
 			or field.fieldname not in values
 			or field.fieldtype in {"Section Break", "Column Break", "Tab Break", "Heading", "HTML", "Button"}
 		):

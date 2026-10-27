@@ -159,6 +159,16 @@ after_migrate = "an_truck_portal.setup.after_migrate"
 # 	}
 # }
 
+doc_events = {
+	"Item Price": {
+		"validate": "an_truck_portal.api.spare_parts_pricing.validate_item_price",
+	},
+	"Sales Invoice": {
+		"validate": "an_truck_portal.api.spare_parts_pricing.validate_invoice_rate_overrides",
+		"before_cancel": "an_truck_portal.api.center_sales.prevent_reported_invoice_cancellation",
+	},
+}
+
 # Scheduled Tasks
 # ---------------
 
