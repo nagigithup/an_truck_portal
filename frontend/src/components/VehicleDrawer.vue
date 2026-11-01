@@ -2,6 +2,8 @@
 import { computed, inject, ref } from "vue";
 import { call, uploadFile, __ } from "../api";
 import FormField from "./FormField.vue";
+import ConfirmDialog from "./ConfirmDialog.vue";
+import TemplateSpecifications from "./TemplateSpecifications.vue";
 
 const emit = defineEmits(["saved"]);
 const { notification } = inject("portal");
@@ -17,6 +19,7 @@ const editing = ref(false);
 const requestedEdit = ref(false);
 const busy = ref(false);
 const attachments = ref({});
+const templateConfirm = ref(null);
 
 // API values are JSON data. Serializing them before storing snapshots strips
 // Vue proxies and any accidental function properties that structuredClone
@@ -32,7 +35,7 @@ function plainData(value) {
 
 const allFields = computed(() => payload.value?.sections.flatMap((section) => section.fields) || []);
 const fieldValues = computed(() =>
-	Object.fromEntries(allFields.value.map((field) => [field.fieldname, field.value])),
+	Object.fromEntries([...allFields.value, ...(payload.value?.specifications?.sections || []).flatMap(s => s.fields)].map((field) => [field.fieldname, field.value])),
 );
 const detailFields = computed(() => [
 	{ label: __("Vehicle Master"), value: payload.value?.name, fieldname: "name", ltr: true },
@@ -70,6 +73,7 @@ function fieldOptions(field) {
 }
 
 function linkConfig(field) {
+	if (field.fieldname === "specification_template") return { method: "an_truck_portal.api.specifications.template_options", item_code: form.value.item_code };
 	return field.fieldtype === "Link" && field.options ? { doctype: field.options } : null;
 }
 
@@ -155,6 +159,7 @@ function addRow(field) {
 
 async function save() {
 	if (busy.value || !payload.value?.can_edit) return;
+	if (form.value.specification_template !== initial.value.specification_template && !(await templateConfirm.value.ask())) return;
 	busy.value = true;
 	error.value = "";
 	try {
@@ -204,8 +209,10 @@ defineExpose({ open });
 					<div v-for="field in detailFields" :key="field.fieldname"><small>{{ field.label }}</small><b :class="{ ltr: field.ltr }">{{ formatValue(field.value, field.fieldname) }}</b></div>
 				</div>
 				<p v-if="payload.completed_import_file" class="readonly-note">{{ __("This Vehicle Import File is completed and is read-only in AN Truck Portal.") }}</p>
+				<TemplateSpecifications :template="payload.specifications?.template" />
 			</template>
 			<form v-else class="vehicle-full-form" @submit.prevent="save">
+				<TemplateSpecifications :template="form.specification_template" />
 				<section v-for="section in payload.sections" :key="section.label" class="vehicle-form-section">
 					<h3>{{ section.label }}</h3>
 					<div class="vehicle-form-grid">
@@ -233,4 +240,5 @@ defineExpose({ open });
 			</form>
 		</aside>
 	</div>
+	<ConfirmDialog ref="templateConfirm" title="Change Specification Template" message="Change the specification template for this vehicle? VIN and vehicle-specific data will be preserved." confirm-label="Confirm" cancel-label="Cancel" />
 </template>

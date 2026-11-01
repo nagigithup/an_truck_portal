@@ -18,7 +18,8 @@ const { ctx, leaveGuard, notification } = inject("portal"),
 	router = useRouter();
 const doctype = computed(() => (props.resource === "customers" ? "Customer" : "Supplier")),
 	prefix = computed(() => doctype.value.toLowerCase()),
-	isNew = computed(() => !props.name);
+	isNew = computed(() => !props.name),
+	isCustomer = computed(() => doctype.value === "Customer");
 const fields = ref([]),
 	data = ref({ contact: {}, address: {} }),
 	initial = ref(""),
@@ -57,7 +58,18 @@ const basic = computed(() =>
 		.filter(Boolean),
 );
 const notes = computed(() => fields.value.find((f) => f.name === `${prefix.value}_details`));
-const addressRequired = computed(() => Object.values(data.value.address).some(Boolean));
+const addressRequired = computed(() =>
+	Object.entries(data.value.address || {}).some(
+		([key, value]) => (isCustomer.value ? key !== "country" : true) && !!value,
+	),
+);
+const isSaudiAddress = computed(() =>
+	["saudi arabia", "السعودية", "المملكة العربية السعودية"].includes(
+		String(data.value.address?.country || "")
+			.trim()
+			.toLowerCase(),
+	),
+);
 const linkedPermissions = ref({ contact: false, address: false });
 const supplierOptions = useFormOptions(
 	"an_truck.portal_lookups.get_supplier_form_options",
@@ -115,13 +127,27 @@ async function load() {
 				]),
 			);
 			data.value.contact = { first_name: "", email_id: "", mobile_no: "", phone: "" };
-			data.value.address = {
-				country: "",
-				city: "",
-				address_line1: "",
-				address_line2: "",
-				pincode: "",
-			};
+			if (isCustomer.value) {
+				data.value.default_currency = "SAR";
+				data.value.address = {
+					country: "Saudi Arabia",
+					city: "",
+					district: "",
+					street: "",
+					building_number: "",
+					additional_number: "",
+					pincode: "",
+					short_address: "",
+				};
+			} else {
+				data.value.address = {
+					country: "",
+					city: "",
+					address_line1: "",
+					address_line2: "",
+					pincode: "",
+				};
+			}
 		} else {
 			const result = await call("an_truck.portal_parties.get_party", {
 				doctype: doctype.value,
@@ -162,6 +188,21 @@ onBeforeUnmount(() => {
 });
 async function save(andNew = false) {
 	if (saving.value || readOnly.value || !form.value.reportValidity()) return;
+	if (isCustomer.value && isSaudiAddress.value) {
+		const validations = [
+			["building_number", /^\d{4}$/, "Building Number must contain exactly 4 digits."],
+			["additional_number", /^\d{4}$/, "Additional Number must contain exactly 4 digits."],
+			["pincode", /^\d{5}$/, "Postal Code must contain exactly 5 digits."],
+			["short_address", /^[A-Za-z]{4}\d{4}$/, "Short Address must contain 4 letters followed by 4 digits."],
+		];
+		const invalid = validations.find(
+			([field, pattern]) => data.value.address[field] && !pattern.test(data.value.address[field]),
+		);
+		if (invalid) {
+			error.value = __(invalid[2]);
+			return;
+		}
+	}
 	saving.value = true;
 	error.value = "";
 	try {
@@ -239,7 +280,7 @@ async function save(andNew = false) {
 			</div>
 			<form :id="formId" ref="form" @submit.prevent="save(false)">
 				<fieldset class="form-body" :disabled="saving">
-					<FormSection :title="__('Basic Information')"
+					<FormSection :title="__(isCustomer ? 'Customer Information' : 'Basic Information')"
 						><FormField
 							v-for="field in basic"
 							:key="field.name"
@@ -248,6 +289,10 @@ async function save(andNew = false) {
 								__(
 									field.name === 'disabled'
 										? 'Status'
+										: field.name === 'tax_id' && isCustomer
+											? 'VAT Registration Number'
+											: field.name === 'default_currency' && isCustomer
+												? 'Billing Currency'
 										: field.name.includes('commercial_registration')
 											? 'Commercial Registration Number'
 											: field.label,
@@ -283,7 +328,7 @@ async function save(andNew = false) {
 							ltr
 							:disabled="readOnly || !linkedPermissions.contact" /><FormField
 							v-model="data.contact.phone"
-							:label="__('Phone')"
+							:label="__(isCustomer ? 'WhatsApp Number' : 'Phone')"
 							type="tel"
 							ltr
 							:disabled="readOnly || !linkedPermissions.contact" /><FormField
@@ -293,8 +338,62 @@ async function save(andNew = false) {
 							ltr
 							:disabled="readOnly || !linkedPermissions.contact"
 					/></FormSection>
-					<FormSection :title="__('Address')"
-						><FormField
+					<FormSection
+						:title="__(isCustomer ? 'National Address' : 'Address')"
+						:class="{ 'national-address-section': isCustomer }"
+					>
+						<template v-if="isCustomer">
+							<FormField
+								v-model="data.address.country"
+								:label="__('Country')"
+								:link="{ doctype, field: 'address_country', company: ctx.company }"
+								:required="addressRequired"
+								:disabled="readOnly || !linkedPermissions.address"
+							/><FormField
+								v-model="data.address.city"
+								:label="__('City')"
+								:required="addressRequired"
+								:disabled="readOnly || !linkedPermissions.address"
+							/><FormField
+								v-model="data.address.district"
+								:label="__('District')"
+								:disabled="readOnly || !linkedPermissions.address"
+							/><FormField
+								v-model="data.address.street"
+								:label="__('Street')"
+								:required="addressRequired"
+								:disabled="readOnly || !linkedPermissions.address"
+							/><FormField
+								v-model="data.address.building_number"
+								:label="__('Building Number')"
+								inputmode="numeric"
+								:maxlength="isSaudiAddress ? 4 : undefined"
+								ltr
+								:disabled="readOnly || !linkedPermissions.address"
+							/><FormField
+								v-model="data.address.additional_number"
+								:label="__('Additional Number')"
+								inputmode="numeric"
+								:maxlength="isSaudiAddress ? 4 : undefined"
+								ltr
+								:disabled="readOnly || !linkedPermissions.address"
+							/><FormField
+								v-model="data.address.pincode"
+								:label="__('Postal Code')"
+								inputmode="numeric"
+								:maxlength="isSaudiAddress ? 5 : undefined"
+								ltr
+								:disabled="readOnly || !linkedPermissions.address"
+							/><FormField
+								v-model="data.address.short_address"
+								:label="__('Short Address')"
+								:maxlength="isSaudiAddress ? 8 : undefined"
+								ltr
+								:disabled="readOnly || !linkedPermissions.address"
+							/>
+						</template>
+						<template v-else>
+						<FormField
 							v-model="data.address.country"
 							:label="__('Country')"
 							:type="isLookup('address_country') ? 'select' : 'text'"
@@ -327,7 +426,7 @@ async function save(andNew = false) {
 							class="field-span-2"
 							:label="__('Address Line 2')"
 							:disabled="readOnly || !linkedPermissions.address"
-					/></FormSection>
+						/></template></FormSection>
 					<FormSection v-if="notes" :title="__('Notes')"
 						><FormField
 							v-model="data[notes.name]"

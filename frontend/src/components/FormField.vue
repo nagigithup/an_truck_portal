@@ -13,6 +13,8 @@ const props = defineProps({
 	link: Object,
 	ltr: Boolean,
 	min: [String, Number],
+	maxlength: [String, Number],
+	inputmode: String,
 	step: [String, Number],
 	rows: { type: Number, default: 3 },
 });
@@ -41,7 +43,9 @@ async function search(value = "") {
 	if (!props.link || props.disabled) return;
 	const request = ++generation;
 	try {
-		const rows = props.link.field
+		const rows = props.link.method
+			? await call(props.link.method, { ...props.link, method: undefined, search: value })
+			: props.link.field
 			? await call("an_truck.portal_parties.link_options", {
 					...props.link,
 					search: value,
@@ -121,6 +125,8 @@ defineExpose({ refresh: () => search(props.modelValue || "") });
 			:required="required"
 			:disabled="disabled"
 			:min="min"
+			:maxlength="maxlength"
+			:inputmode="inputmode"
 			:step="step"
 			:list="link ? `${id}-options` : undefined"
 			:aria-describedby="error ? `${id}-error` : undefined"

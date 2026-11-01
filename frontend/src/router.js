@@ -22,9 +22,11 @@ import SparePartStock from "./views/SparePartStock.vue";
 import SparePartsSales from "./views/SparePartsSales.vue";
 import MaintenanceCenters from "./views/MaintenanceCenters.vue";
 import MaintenanceCenterDetail from "./views/MaintenanceCenterDetail.vue";
+import SpecificationTemplates from "./views/SpecificationTemplates.vue";
 
 const routes = [
 	{ path: "/", name: "home", component: Dashboard, meta: { title: "Home" } },
+	{ path: "/specification-templates", name: "specification-templates", component: SpecificationTemplates },
 	{ path: "/:resource(customers|suppliers)", name: "parties", component: Parties, props: true },
 	{ path: "/:resource(customers|suppliers)/new", redirect: (to) => `/${to.params.resource}` },
 	{
@@ -106,6 +108,8 @@ const routes = [
 		props: (route) => ({ name: route.params.name, paymentKind: "customer" }),
 	},
 	{ path: "/spare-parts/items", name: "spare-parts-items", component: SparePartItems },
+	{ path: "/spare-parts", redirect: "/spare-parts/items" },
+	{ path: "/truck-items", name: "truck-items", component: SparePartItems, props: { catalog: "trucks" } },
 	{ path: "/spare-parts/stock", name: "spare-parts-stock", component: SparePartStock },
 	{ path: "/spare-parts/sales", name: "spare-parts-sales", component: SparePartsSales },
 	{ path: "/spare-parts/sales/:name", name: "spare-parts-sale-detail", component: SalesDocumentDetail, props: (route) => ({ name: route.params.name, doctype: "Sales Invoice", spareParts: true }) },

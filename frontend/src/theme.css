@@ -467,6 +467,29 @@ td {
 	border-bottom: 1px solid var(--line);
 	white-space: nowrap;
 }
+.vehicle-filter-row th {
+	padding: 8px 10px;
+	background: #fff;
+}
+.column-filter {
+	width: 100%;
+	min-width: 140px;
+	min-height: 36px;
+	padding: 7px 9px;
+	border: 1px solid var(--line);
+	border-radius: 6px;
+	background: #fff;
+	color: var(--ink);
+}
+.record-number {
+	color: var(--muted);
+	font-variant-numeric: tabular-nums;
+	text-align: center;
+}
+.records-total {
+	margin: 6px 0 0;
+	color: var(--muted);
+}
 tbody tr:hover {
 	background: #fcfcfd;
 }
@@ -593,6 +616,13 @@ td small {
 	grid-template-columns: repeat(4, minmax(0, 1fr));
 	gap: 14px 18px;
 	align-items: start;
+}
+.national-address-section {
+	border-top: 1px solid var(--line);
+	padding-top: 24px;
+}
+.national-address-section .form-grid {
+	grid-template-columns: repeat(2, minmax(0, 1fr));
 }
 .field-span-2 {
 	grid-column: span 2;
@@ -1702,6 +1732,9 @@ td small {
 	.form-grid {
 		grid-template-columns: minmax(0, 1fr);
 		gap: 14px;
+	}
+	.national-address-section .form-grid {
+		grid-template-columns: minmax(0, 1fr);
 	}
 	.field-span-2 {
 		grid-column: 1 / -1;

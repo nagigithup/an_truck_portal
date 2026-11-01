@@ -214,8 +214,14 @@ async function partyCreated(name) {
 						<router-link class="text-button" :to="location(row)">{{
 							__("View")
 						}}</router-link
+						><button
+							v-if="resource === 'customers' && row.can_write"
+							type="button"
+							class="text-button"
+							@click="partyDialog.open(row.name)"
+							>{{ __("Edit") }}</button
 						><router-link
-							v-if="row.can_write"
+							v-else-if="row.can_write"
 							class="text-button"
 							:to="`${location(row)}?edit=1`"
 							>{{ __("Edit") }}</router-link

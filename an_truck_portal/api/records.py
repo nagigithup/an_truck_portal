@@ -158,32 +158,81 @@ ALLOWED = {
 
 
 @frappe.whitelist()
-def list_records(doctype, search=None, company=None, page=1, page_length=20, filters=None):
+def list_records(
+	doctype, search=None, company=None, page=1, page_length=20, filters=None, column_filters=None
+):
 	if doctype not in ALLOWED:
 		frappe.throw("Unsupported resource", frappe.ValidationError)
 	require_read(doctype)
 	meta = frappe.get_meta(doctype)
 	fs = json.loads(filters) if isinstance(filters, str) and filters else (filters or {})
+	column_filters = (
+		json.loads(column_filters)
+		if isinstance(column_filters, str) and column_filters
+		else (column_filters or {})
+	)
 	if company and meta.has_field("company"):
 		fs["company"] = company
+	if doctype == "Vehicle Master":
+		for fieldname in ("chassis_number", "item_name"):
+			if value := str(column_filters.get(fieldname) or "").strip()[:100]:
+				fs[fieldname] = ["like", f"%{value}%"]
+		if status := str(column_filters.get("vehicle_status") or "").strip()[:100]:
+			valid_statuses = {
+				value.strip()
+				for value in (meta.get_field("vehicle_status").options or "").splitlines()
+				if value.strip()
+			}
+			if status not in valid_statuses:
+				frappe.throw(_("Select a valid vehicle status."), frappe.ValidationError)
+			fs["vehicle_status"] = status
 	or_filters = None
 	if search:
 		search_fields = [
 			f
-			for f in ("name", "import_title", "vin", "supplier_name", "customer_name")
+			for f in (
+				"name",
+				"import_title",
+				"vin",
+				"chassis_number",
+				"item_name",
+				"vehicle_status",
+				"supplier_name",
+				"customer_name",
+			)
 			if f == "name" or meta.has_field(f)
 		]
 		or_filters = [[doctype, f, "like", f"%{search}%"] for f in search_fields]
+	page, page_length = max(int(page), 1), min(max(int(page_length), 1), 100)
 	rows = frappe.get_list(
 		doctype,
 		filters=fs,
 		or_filters=or_filters,
 		fields=ALLOWED[doctype],
 		order_by="modified desc",
-		start=(int(page) - 1) * int(page_length),
-		page_length=min(int(page_length), 100),
+		start=(page - 1) * page_length,
+		page_length=page_length,
 	)
 	if doctype == "Vehicle Master":
+		from an_truck.an_truck.doctype.vehicle_master.vehicle_master import resolve_vehicle_rows
+		resolve_vehicle_rows(rows)
+	total = len(rows)
+	filter_options = {}
+	if doctype == "Vehicle Master":
+		total = len(
+			frappe.get_list(
+				doctype,
+				filters=fs,
+				or_filters=or_filters,
+				pluck="name",
+				page_length=0,
+			)
+		)
+		filter_options["vehicle_status"] = [
+			value.strip()
+			for value in (meta.get_field("vehicle_status").options or "").splitlines()
+			if value.strip()
+		]
 		import_files = {row.vehicle_import_file for row in rows if row.vehicle_import_file}
 		statuses = (
 			{
@@ -220,7 +269,14 @@ def list_records(doctype, search=None, company=None, page=1, page_length=20, fil
 				frappe.has_permission("Vehicle Master", "write", row.name)
 				and statuses.get(row.vehicle_import_file) != "Completed"
 			)
-	return {"rows": rows, "page": int(page)}
+	return {
+		"rows": rows,
+		"page": page,
+		"page_length": page_length,
+		"total": total,
+		"has_more": page * page_length < total,
+		"filter_options": filter_options,
+	}
 
 
 @frappe.whitelist()
@@ -269,7 +325,7 @@ def _vehicle_sections(doc):
 			"options": field.options,
 			"required": bool(field.reqd),
 			"read_only": bool(
-				field.read_only
+				field.fieldname == "vin" or field.read_only
 				or (
 					field.fieldname not in write_fields
 					and field.fieldtype not in {"Table", "Table MultiSelect"}
@@ -336,10 +392,16 @@ def get_vehicle_form(vehicle_master):
 		"name": doc.name,
 		"vin": doc.vin,
 		"sections": _vehicle_sections(doc),
+		"specifications": _vehicle_specifications(doc.name),
 		"can_edit": bool(doc.has_permission("write") and not completed),
 		"completed_import_file": completed,
 		"desk_url": f"/app/vehicle-master/{quote(doc.name)}",
 	}
+
+
+def _vehicle_specifications(name):
+	from an_truck.an_truck.doctype.vehicle_master.vehicle_master import get_vehicle_specifications
+	return get_vehicle_specifications(name)
 
 
 def _assert_vehicle_portal_write(doc):

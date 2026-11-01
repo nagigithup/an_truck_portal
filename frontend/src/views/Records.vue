@@ -8,6 +8,8 @@ import PurchaseInvoiceDialog from "../components/PurchaseInvoiceDialog.vue";
 import VehicleDrawer from "../components/VehicleDrawer.vue";
 import SalesDocumentDialog from "../components/SalesDocumentDialog.vue";
 import SupplierPaymentDialog from "../components/SupplierPaymentDialog.vue";
+import FilterBar from "../components/FilterBar.vue";
+import FormField from "../components/FormField.vue";
 
 const props = defineProps({ resource: String });
 const { ctx } = inject("portal");
@@ -22,6 +24,12 @@ const state = ref("loading");
 const rows = ref([]);
 const search = ref("");
 const page = ref(1);
+const pageLength = ref(20);
+const total = ref(0);
+const vehicleStatusOptions = ref([]);
+const chassisFilter = ref("");
+const itemNameFilter = ref("");
+const vehicleStatusFilter = ref("");
 const doctypes = {
 	"import-files": "Vehicle Import File",
 	vehicles: "Vehicle Master",
@@ -50,15 +58,25 @@ async function load() {
 				: props.resource === "customer-payments"
 					? { payment_type: "Receive", party_type: "Customer" }
 					: {};
-		rows.value = (
-			await call("an_truck_portal.api.records.list_records", {
+		const result = await call("an_truck_portal.api.records.list_records", {
 				doctype: doctype.value,
 				search: search.value,
 				company: ctx.company,
 				page: page.value,
 				filters,
-			})
-		).rows;
+				column_filters:
+					props.resource === "vehicles"
+						? {
+							chassis_number: chassisFilter.value,
+							item_name: itemNameFilter.value,
+							vehicle_status: vehicleStatusFilter.value,
+						}
+						: {},
+			});
+		rows.value = result.rows;
+		total.value = result.total ?? result.rows.length;
+		pageLength.value = result.page_length || 20;
+		vehicleStatusOptions.value = result.filter_options?.vehicle_status || [];
 		state.value = "ready";
 	} catch (e) {
 		state.value = "error";
@@ -71,14 +89,20 @@ watch(
 	() => props.resource,
 	() => {
 		page.value = 1;
+		chassisFilter.value = "";
+		itemNameFilter.value = "";
+		vehicleStatusFilter.value = "";
 		load();
 	},
 );
 let searchTimer;
-watch(search, () => {
+watch([search, chassisFilter, itemNameFilter, vehicleStatusFilter], () => {
+	page.value = 1;
 	clearTimeout(searchTimer);
 	searchTimer = setTimeout(load, 300);
 });
+
+const totalPages = computed(() => Math.max(1, Math.ceil(total.value / pageLength.value)));
 
 function open(row) {
 	if (doctype.value === "Vehicle Import File") {
@@ -143,6 +167,7 @@ const hiddenVehicleColumns = new Set([
 	"vin",
 	"company",
 	"item_code",
+	"vehicle_import_file",
 	"purchase_receipt",
 	"customer",
 	"sales_order",
@@ -152,7 +177,10 @@ const hiddenVehicleColumns = new Set([
 	"model",
 ]);
 
-function vehicleColumns(row) {
+function vehicleColumns(row = {}) {
+	if (props.resource === "vehicles" && !Object.keys(row).length) {
+		return ["chassis_number", "item_name", "vehicle_status"];
+	}
 	return Object.keys(row).filter(
 		(key) =>
 			!key.startsWith("_") &&
@@ -162,11 +190,13 @@ function vehicleColumns(row) {
 
 function columnLabel(key) {
 	return __(
-		key === "vehicle_import_file"
-			? "Vehicle Import File Number"
-			: key === "chassis_number"
-				? "Chassis Number"
-				: key.replaceAll("_", " "),
+		{
+			vehicle_import_file: "Vehicle Import File Number",
+			chassis_number: "Chassis Number",
+			item_name: "Item Name",
+			vehicle_status: "Vehicle Status",
+			warranty: "Warranty Expiry Date",
+		}[key] || key.replaceAll("_", " "),
 	);
 }
 
@@ -202,6 +232,7 @@ async function customerPaymentCreated(result) {
 			<div>
 				<p class="eyebrow">{{ __("Records") }}</p>
 				<h1>{{ __(doctype) }}</h1>
+				<p v-if="resource === 'vehicles'" class="records-total">{{ __("Number of Vehicles") }}: <b>{{ total }}</b></p>
 			</div>
 			<div class="page-actions">
 				<button
@@ -250,21 +281,35 @@ async function customerPaymentCreated(result) {
 				<input v-model="search" class="filter" :placeholder="__('Search…')" />
 			</div>
 		</div>
+		<FilterBar v-if="resource === 'vehicles'" class="panel vehicle-filters">
+			<FormField v-model="chassisFilter" :label="__('Chassis Number')" ltr />
+			<FormField v-model="itemNameFilter" :label="__('Item Name')" />
+			<div class="form-field">
+				<label for="vehicle-status-filter">{{ __("Vehicle Status") }}</label>
+				<select id="vehicle-status-filter" v-model="vehicleStatusFilter">
+					<option value="">{{ __("All statuses") }}</option>
+					<option v-for="status in vehicleStatusOptions" :key="status" :value="status">{{ __(status) }}</option>
+				</select>
+			</div>
+		</FilterBar>
 		<div class="panel table-wrap">
 			<div v-if="state === 'loading'" class="empty">{{ __("Loading…") }}</div>
 			<div v-else-if="state === 'error'" class="empty error">{{ rows[0]?.error }}</div>
-			<div v-else-if="!rows.length" class="empty">{{ __("No records found") }}</div>
+			<div v-else-if="!rows.length && resource !== 'vehicles'" class="empty">{{ __("No records found") }}</div>
 			<table v-else>
 				<thead>
 					<tr>
-						<th v-for="key in vehicleColumns(rows[0])" :key="key">
+						<th v-if="resource === 'vehicles'">{{ __("No.") }}</th>
+						<th v-for="key in vehicleColumns(rows[0] || {})" :key="key">
 							{{ columnLabel(key) }}
 						</th>
 						<th v-if="resource === 'vehicles'">{{ __("Actions") }}</th>
 					</tr>
 				</thead>
 				<tbody>
-					<tr v-for="row in rows" :key="row.name" @click="resource === 'vehicles' ? undefined : open(row)">
+					<tr v-if="resource === 'vehicles' && !rows.length"><td :colspan="vehicleColumns({}).length + 2" class="empty">{{ __("No records found") }}</td></tr>
+					<tr v-for="(row, index) in rows" :key="row.name" @click="resource === 'vehicles' ? undefined : open(row)">
+						<td v-if="resource === 'vehicles'" class="record-number">{{ (page - 1) * pageLength + index + 1 }}</td>
 						<td
 							v-for="key in vehicleColumns(row)"
 							:key="key"
@@ -285,6 +330,7 @@ async function customerPaymentCreated(result) {
 							>
 								<bdi>{{ row[key] }}</bdi>
 							</router-link>
+							<bdi v-else-if="resource === 'vehicles' && key === 'warranty'">{{ row.warranty?.expiry_date || "—" }}</bdi>
 							<span v-else-if="key === 'status' || key === 'vehicle_status'" class="badge">
 								{{ __(row[key]) }}
 							</span>
@@ -297,6 +343,10 @@ async function customerPaymentCreated(result) {
 					</tr>
 				</tbody>
 			</table>
+		</div>
+		<div v-if="resource === 'vehicles' && state === 'ready' && total" class="pagination">
+			<span>{{ __("Page") }} {{ page }} / {{ totalPages }} · {{ __("Number of Vehicles") }}: {{ total }}</span>
+			<div class="row-actions"><button class="button secondary" :disabled="page === 1" @click="page--; load()">{{ __("Previous") }}</button><button class="button secondary" :disabled="page >= totalPages" @click="page++; load()">{{ __("Next") }}</button></div>
 		</div>
 		<CreateImportFileDialog v-if="resource === 'import-files'" ref="importDialog" />
 		<PurchaseOrderDialog
@@ -323,3 +373,7 @@ async function customerPaymentCreated(result) {
 		/>
 	</div>
 </template>
+
+<style scoped>
+.vehicle-filters { margin-bottom: 16px; }
+</style>

@@ -190,6 +190,8 @@ def _sales_document_vehicles(doc):
 		)
 		if not vehicle:
 			continue
+		from an_truck.an_truck.doctype.vehicle_master.vehicle_master import resolve_vehicle_rows
+		resolve_vehicle_rows([vehicle])
 		delivery_doctype, delivery_document = _submitted_vehicle_delivery(vehicle.name)
 		delivery_note = delivery_document if delivery_doctype == "Delivery Note" else None
 		acknowledgment = None
@@ -337,6 +339,8 @@ def _sales_vehicle_options(doctype, company, source=None):
 	)
 	if not vehicles:
 		return []
+	from an_truck.an_truck.doctype.vehicle_master.vehicle_master import resolve_vehicle_rows
+	resolve_vehicle_rows(vehicles)
 	names = [row.name for row in vehicles]
 	active_orders = {}
 	for row in frappe.get_all(

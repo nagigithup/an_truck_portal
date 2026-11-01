@@ -5,6 +5,8 @@ export const navigation = [
 		items: [
 			["/import-files", "Vehicle Import Files", "Vehicle Import File"],
 			["/vehicles", "Vehicle Master", "Vehicle Master"],
+			["/truck-items", "Truck Items", "Item"],
+			["/specification-templates", "Vehicle Specification Templates", "Vehicle Specification Template"],
 		],
 	},
 	{

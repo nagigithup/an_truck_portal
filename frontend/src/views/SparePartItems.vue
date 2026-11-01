@@ -14,6 +14,8 @@ import SparePartItemDialog from "../components/SparePartItemDialog.vue";
 import SparePartPricingDialog from "../components/SparePartPricingDialog.vue";
 import StatusBadge from "../components/StatusBadge.vue";
 
+const props = defineProps({ catalog: { type: String, default: "spare_parts" } });
+const isTruck = computed(() => props.catalog === "trucks");
 const { ctx } = inject("portal");
 const rows = ref([]);
 const search = ref("");
@@ -40,6 +42,7 @@ async function load() {
 	error.value = "";
 	try {
 		const result = await call("an_truck_portal.api.spare_parts.list_items", {
+			catalog: props.catalog,
 			search: search.value,
 			page: page.value,
 		});
@@ -73,19 +76,19 @@ function move(delta) {
 
 <template>
 	<div class="page">
-		<PageHeader :title="__('Items')" :subtitle="__('Truck spare parts item catalog.')">
+		<PageHeader :title="__(isTruck ? 'Truck Items' : 'Items')" :subtitle="__(isTruck ? 'Truck item catalog.' : 'Truck spare parts item catalog.')">
 			<button
 				v-if="ctx.permissions.Item?.create"
 				type="button"
 				class="button"
 				@click="itemDialog.open()"
 			>
-				+ {{ __("New Item") }}
+				+ {{ __(isTruck ? "New Truck Item" : "New Item") }}
 			</button>
 		</PageHeader>
 		<AppCard>
 			<FilterBar>
-				<SearchInput v-model="search" :placeholder="__('Search by part number or item name…')" />
+				<SearchInput v-model="search" :placeholder="__(isTruck ? 'Search by item code or item name…' : 'Search by part number or item name…')" />
 				<AppButton v-if="search" variant="secondary" @click="search = ''">
 					{{ __("Clear Filters") }}
 				</AppButton>
@@ -94,14 +97,14 @@ function move(delta) {
 			<EmptyState v-else-if="state === 'error'" :message="__(error)" error>
 				<AppButton @click="load">{{ __("Retry") }}</AppButton>
 			</EmptyState>
-			<EmptyState v-else-if="!rows.length" :message="__('No spare parts found.')" />
-			<DataTable v-else :columns="columns" :rows="rows" :caption="__('Spare Parts')">
+			<EmptyState v-else-if="!rows.length" :message="__(isTruck ? 'No truck items found.' : 'No spare parts found.')" />
+			<DataTable v-else :columns="columns" :rows="rows" :caption="__(isTruck ? 'Truck Items' : 'Spare Parts')">
 				<template #item_code="{ row }">
 					<bdi class="ltr-value">{{ row.item_code }}</bdi>
 				</template>
 				<template #status="{ row }"><StatusBadge :disabled="row.disabled" /></template>
 				<template #actions="{ row }">
-					<button type="button" class="text-button" @click="pricingDialog.open(row.name)">{{ __("Pricing") }}</button>
+					<button v-if="!isTruck" type="button" class="text-button" @click="pricingDialog.open(row.name)">{{ __("Pricing") }}</button>
 					<button
 						v-if="row.can_write"
 						type="button"
@@ -124,7 +127,7 @@ function move(delta) {
 				</div>
 			</div>
 		</AppCard>
-		<SparePartItemDialog ref="itemDialog" @saved="load" />
-		<SparePartPricingDialog ref="pricingDialog" />
+		<SparePartItemDialog ref="itemDialog" :catalog="catalog" @saved="load" />
+		<SparePartPricingDialog v-if="!isTruck" ref="pricingDialog" />
 	</div>
 </template>

@@ -1,1 +1,27 @@
-<script setup>import{computed,onMounted,ref}from'vue';import{call,__}from'../api';const p=defineProps({resource:String,name:String}),state=ref('loading'),data=ref({});const dt=computed(()=>p.resource==='vehicles'?'Vehicle Master':'Vehicle Import File');onMounted(async()=>{try{data.value=await call('an_truck_portal.api.records.get_record',{doctype:dt.value,name:p.name});state.value='ready'}catch(e){state.value='error';data.value={error:e.message}}});</script><template><div class="page"><div v-if="state==='loading'" class="empty">{{__('Loading…')}}</div><div v-else-if="state==='error'" class="empty error">{{data.error}}</div><template v-else><div class="page-head"><div><p class="eyebrow">{{__(dt)}}</p><h1 class="ltr">{{name}}</h1></div><a class="button" :href="data.desk_url">{{__('Open in Desk')}}</a></div><section class="panel detail"><div v-for="(v,k) in data.record" v-show="v!==null&&v!==''"><small>{{__(k.replaceAll('_',' '))}}</small><b :class="{ltr:k==='vin'||k==='name'}">{{v}}</b></div></section></template></div></template>
+<script setup>
+import { onMounted, ref, watch } from "vue";
+import { call, __ } from "../api";
+import VehicleDrawer from "../components/VehicleDrawer.vue";
+import TemplateSpecifications from "../components/TemplateSpecifications.vue";
+const props = defineProps({ resource: String, name: String });
+const data = ref(null), error = ref(""), drawer = ref(null);
+async function load() {
+	data.value = null; error.value = "";
+	try { data.value = await call("an_truck_portal.api.records.get_vehicle_form", { vehicle_master: props.name }); }
+	catch (e) { error.value = e.message; }
+}
+onMounted(load);
+watch(() => props.name, load);
+</script>
+<template>
+	<div class="page">
+		<p v-if="error" class="empty error" role="alert">{{ __(error) }}</p>
+		<div v-else-if="!data" class="empty">{{ __("Loading…") }}</div>
+		<template v-else>
+			<div class="page-head"><div><p class="eyebrow">{{ __("Vehicle Master") }}</p><h1><bdi>{{ data.vin }}</bdi></h1></div><div class="page-actions"><button v-if="data.can_edit" class="button" @click="drawer.open(name, true)">{{ __("Edit Vehicle") }}</button><a class="button secondary" :href="data.desk_url">{{ __("Open in Desk") }}</a></div></div>
+			<TemplateSpecifications :template="data.specifications?.template" />
+			<section v-for="section in data.sections" :key="section.label" class="panel form-section"><h2>{{ section.label }}</h2><div class="form-grid"><template v-for="field in section.fields" :key="field.fieldname"><div v-if="field.value !== null && field.value !== ''" class="form-field"><small>{{ field.label }}</small><b><a v-if="['Attach', 'Attach Image'].includes(field.fieldtype)" :href="field.value" target="_blank" rel="noopener">{{ __("View current attachment") }}</a><span v-else>{{ field.fieldtype === 'Select' ? __(field.value) : field.value }}</span></b></div></template></div></section>
+		</template>
+		<VehicleDrawer ref="drawer" @saved="load" />
+	</div>
+</template>

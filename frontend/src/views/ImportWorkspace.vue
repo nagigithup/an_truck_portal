@@ -4,6 +4,8 @@ import { call, uploadFile, __ } from "../api";
 import ConfirmDialog from "../components/ConfirmDialog.vue";
 import PurchaseOrderDialog from "../components/PurchaseOrderDialog.vue";
 import VehicleDrawer from "../components/VehicleDrawer.vue";
+import FormField from "../components/FormField.vue";
+import TemplateSpecifications from "../components/TemplateSpecifications.vue";
 
 const props = defineProps({ name: String });
 const { notification } = inject("portal");
@@ -188,7 +190,12 @@ async function changeReceiptPO() {
 		purchase_order: receiptForm.value.purchase_order,
 		vehicle_import_file: props.name,
 	});
-	receiptForm.value.items = items.map((row) => ({ ...row, qty: row.remaining_qty }));
+	receiptForm.value.items = items.map((row) => ({
+		...row,
+		qty: row.remaining_qty,
+		specification_template:
+			row.specification_templates?.length === 1 ? row.specification_templates[0].name : "",
+	}));
 	receiptForm.value.vins = [];
 	syncVins();
 }
@@ -221,6 +228,7 @@ function submitReceipt() {
 			item_code: row.item_code,
 			qty: Number(row.qty),
 			warehouse: row.warehouse,
+			specification_template: row.specification_template,
 		}));
 	const vins = receiptForm.value.vins.map((row) => ({
 		item_code: row.item_code,
@@ -229,6 +237,12 @@ function submitReceipt() {
 	const normalized = vins.map((row) => row.vin).filter(Boolean);
 	if (!items.length)
 		return void (actionError.value = __("Select at least one quantity to receive."));
+	if (
+		receiptForm.value.items.some(
+			(row) => row.is_vehicle_item && Number(row.qty) > 0 && !row.specification_template,
+		)
+	)
+		return void (actionError.value = __("Select a Specification Template for every vehicle item."));
 	if (vins.some((row) => !row.vin))
 		return void (actionError.value = __("Enter every VIN before submitting the receipt."));
 	if (new Set(normalized).size !== normalized.length)
@@ -897,6 +911,7 @@ onMounted(load);
 									<th>{{ __("Remaining Qty") }}</th>
 									<th>{{ __("Receive Qty") }}</th>
 									<th>{{ __("Warehouse") }}</th>
+									<th>{{ __("Specification Template") }}</th>
 								</tr>
 							</thead>
 							<tbody>
@@ -924,10 +939,21 @@ onMounted(load);
 									<td>
 										<input v-model="row.warehouse" list="warehouse-options" />
 									</td>
+									<td>
+										<FormField
+											v-if="row.is_vehicle_item"
+											v-model="row.specification_template"
+											:label="__('Specification Template')"
+											:link="{ method: 'an_truck_portal.api.specifications.template_options', item_code: row.item_code }"
+											required
+										/>
+										<span v-else>—</span>
+									</td>
 								</tr>
 							</tbody>
 						</table>
 					</div>
+					<TemplateSpecifications v-for="row in receiptForm.items.filter(item => item.is_vehicle_item && item.specification_template)" :key="row.purchase_order_item" :template="row.specification_template" />
 					<div v-if="receiptForm.vins.length" class="vin-entry">
 						<div class="dialog-section-head">
 							<div>

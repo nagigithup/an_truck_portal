@@ -4,6 +4,8 @@ import { call } from "../api";
 import { __ } from "../i18n";
 import FormField from "./FormField.vue";
 
+const props = defineProps({ catalog: { type: String, default: "spare_parts" } });
+const isTruck = computed(() => props.catalog === "trucks");
 const emit = defineEmits(["saved"]);
 const { notification } = inject("portal");
 const dialog = ref(null);
@@ -18,7 +20,7 @@ const modified = ref("");
 const canWrite = ref(false);
 const data = reactive({});
 const editing = computed(() => Boolean(itemName.value));
-const title = computed(() => __(editing.value ? "Edit Item" : "New Item"));
+const title = computed(() => __(isTruck.value ? (editing.value ? "Edit Truck Item" : "New Truck Item") : (editing.value ? "Edit Item" : "New Item")));
 
 function reset() {
 	Object.assign(data, {
@@ -45,6 +47,7 @@ async function open(name = "") {
 	try {
 		const result = await call("an_truck_portal.api.spare_parts.get_item_form", {
 			name: name || undefined,
+			catalog: props.catalog,
 		});
 		Object.assign(data, result.record);
 		itemGroups.value = result.item_groups;
@@ -70,6 +73,7 @@ function validate() {
 	if (!String(data.item_name || "").trim()) return __("Please enter an Item Name.");
 	if (!data.item_group) return __("Please select an Item Group.");
 	if (!data.stock_uom) return __("Please select a Stock UOM.");
+	if (isTruck.value && !editing.value && !data.is_stock_item) return __("Truck items must maintain stock and use serial numbers for VIN tracking.");
 	return "";
 }
 
@@ -82,6 +86,7 @@ async function save() {
 		const result = await call(
 			"an_truck_portal.api.spare_parts.save_item",
 			{
+				catalog: props.catalog,
 				name: itemName.value || undefined,
 				modified: modified.value || undefined,
 				data: {
@@ -118,7 +123,7 @@ defineExpose({ open });
 		<form ref="form" @submit.prevent="save">
 			<div class="dialog-head">
 				<div>
-					<p class="eyebrow">{{ __("Spare Parts") }}</p>
+					<p class="eyebrow">{{ __(isTruck ? "Truck Items" : "Spare Parts") }}</p>
 					<h2>{{ title }}</h2>
 				</div>
 				<button type="button" class="icon" :aria-label="__('Close')" @click="close">×</button>
@@ -158,7 +163,7 @@ defineExpose({ open });
 					/>
 					<div class="checkbox-field">
 						<label>
-							<input v-model="data.is_stock_item" type="checkbox" disabled />
+							<input v-model="data.is_stock_item" type="checkbox" :true-value="1" :false-value="0" :disabled="loading || !canWrite" />
 							<span>{{ __("Maintain Stock") }}</span>
 						</label>
 					</div>
@@ -167,12 +172,15 @@ defineExpose({ open });
 							<input
 								v-model="data.disabled"
 								type="checkbox"
+								:true-value="1"
+								:false-value="0"
 								:disabled="loading || !canWrite"
 							/>
 							<span>{{ __("Disabled") }}</span>
 						</label>
 					</div>
 				</div>
+				<p v-if="isTruck && !editing" class="notice compact">{{ __("Truck items use serial numbers for VIN tracking.") }}</p>
 				<p v-if="error" class="form-error" role="alert">{{ __(error) }}</p>
 			</div>
 			<div class="dialog-actions">

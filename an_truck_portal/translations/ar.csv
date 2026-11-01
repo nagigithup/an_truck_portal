@@ -193,3 +193,7 @@
 "Select a submitted center Sales Invoice.","اختر فاتورة مبيعات مركز معتمدة.","",""
 "Return quantity for item {0} cannot exceed {1}.","لا يمكن أن تتجاوز كمية إرجاع الصنف {0} الكمية {1}.","",""
 "The selected quantities are no longer available to return.","لم تعد الكميات المحددة متاحة للإرجاع.","",""
+"Select a valid vehicle status.","اختر حالة مركبة صحيحة.","",""
+"This item is not in the truck item group.","هذا الصنف ليس ضمن مجموعة أصناف الشاحنات.","",""
+"Select an Item Group from this catalog.","اختر مجموعة أصناف من هذا الدليل.","",""
+"Truck items must maintain stock and use serial numbers for VIN tracking.","يجب تفعيل الاحتفاظ بالمخزون والتتبع بالأرقام التسلسلية لأصناف الشاحنات.","",""
