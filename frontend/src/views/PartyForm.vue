@@ -45,7 +45,6 @@ const basic = computed(() =>
 		`${prefix.value}_name`,
 		`${prefix.value}_type`,
 		`${prefix.value}_group`,
-		"territory",
 		"country",
 		"disabled",
 		"default_currency",
@@ -61,13 +60,6 @@ const notes = computed(() => fields.value.find((f) => f.name === `${prefix.value
 const addressRequired = computed(() =>
 	Object.entries(data.value.address || {}).some(
 		([key, value]) => (isCustomer.value ? key !== "country" : true) && !!value,
-	),
-);
-const isSaudiAddress = computed(() =>
-	["saudi arabia", "السعودية", "المملكة العربية السعودية"].includes(
-		String(data.value.address?.country || "")
-			.trim()
-			.toLowerCase(),
 	),
 );
 const linkedPermissions = ref({ contact: false, address: false });
@@ -188,21 +180,6 @@ onBeforeUnmount(() => {
 });
 async function save(andNew = false) {
 	if (saving.value || readOnly.value || !form.value.reportValidity()) return;
-	if (isCustomer.value && isSaudiAddress.value) {
-		const validations = [
-			["building_number", /^\d{4}$/, "Building Number must contain exactly 4 digits."],
-			["additional_number", /^\d{4}$/, "Additional Number must contain exactly 4 digits."],
-			["pincode", /^\d{5}$/, "Postal Code must contain exactly 5 digits."],
-			["short_address", /^[A-Za-z]{4}\d{4}$/, "Short Address must contain 4 letters followed by 4 digits."],
-		];
-		const invalid = validations.find(
-			([field, pattern]) => data.value.address[field] && !pattern.test(data.value.address[field]),
-		);
-		if (invalid) {
-			error.value = __(invalid[2]);
-			return;
-		}
-	}
 	saving.value = true;
 	error.value = "";
 	try {
@@ -366,28 +343,21 @@ async function save(andNew = false) {
 							/><FormField
 								v-model="data.address.building_number"
 								:label="__('Building Number')"
-								inputmode="numeric"
-								:maxlength="isSaudiAddress ? 4 : undefined"
 								ltr
 								:disabled="readOnly || !linkedPermissions.address"
 							/><FormField
 								v-model="data.address.additional_number"
 								:label="__('Additional Number')"
-								inputmode="numeric"
-								:maxlength="isSaudiAddress ? 4 : undefined"
 								ltr
 								:disabled="readOnly || !linkedPermissions.address"
 							/><FormField
 								v-model="data.address.pincode"
 								:label="__('Postal Code')"
-								inputmode="numeric"
-								:maxlength="isSaudiAddress ? 5 : undefined"
 								ltr
 								:disabled="readOnly || !linkedPermissions.address"
 							/><FormField
 								v-model="data.address.short_address"
 								:label="__('Short Address')"
-								:maxlength="isSaudiAddress ? 8 : undefined"
 								ltr
 								:disabled="readOnly || !linkedPermissions.address"
 							/>
