@@ -407,6 +407,17 @@ def _sales_form_options(company, doctype, source=None):
 	}
 
 
+def _apply_default_sales_taxes(doc):
+	if not doc.company or not doc.meta.get_field("taxes_and_charges") or doc.get("taxes"):
+		return
+	if not doc.taxes_and_charges:
+		from an_truck_portal.api.spare_parts_sales import _tax_template
+
+		doc.taxes_and_charges = _tax_template(doc.company, None)
+	if doc.taxes_and_charges:
+		doc.set_taxes()
+
+
 @frappe.whitelist(methods=["GET"])
 def get_sales_form(doctype, source=None, company=None):
 	require_access()
@@ -632,6 +643,7 @@ def create_sales_document(doctype, data=None, source=None, submit_now=0, idempot
 			doc.due_date = data.get("due_date")
 	if data.get("remarks"):
 		doc.remarks = data.remarks
+	_apply_default_sales_taxes(doc)
 	doc.run_method("set_missing_values")
 	doc.run_method("calculate_taxes_and_totals")
 	doc.insert()

@@ -32,7 +32,7 @@ async function open(options = {}) {
 	dialog.value?.showModal();
 	try {
 		source.value = await call("an_truck_portal.api.spare_parts_sales.get_form", { company: ctx.company });
-		const defaultTax = source.value.tax_templates.find((row) => row.is_default)?.name || "";
+		const defaultTax = source.value.default_tax_template || source.value.tax_templates.find((row) => row.is_default)?.name || "";
 		const centerRow = options.center ? source.value.centers.find((row) => `${row.center_type}::${row.name}` === options.center) : null;
 		form.value = { sale_type: options.sale_type || "retail", customer: "", center: centerRow?.name || "", center_type: centerRow?.center_type || "", supplier: "", company: source.value.company, posting_date: source.value.posting_date, source_warehouse: options.source_warehouse || (source.value.warehouses.length === 1 ? source.value.warehouses[0].value : ""), taxes_and_charges: defaultTax, notes: "", items: [blankItem()] };
 		if (form.value.source_warehouse) await loadAvailability();

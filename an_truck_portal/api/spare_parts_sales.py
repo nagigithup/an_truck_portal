@@ -32,6 +32,12 @@ def _warehouse(company, warehouse):
 
 def _tax_template(company, name):
 	if not name:
+		name = frappe.db.get_value(
+			"Sales Taxes and Charges Template",
+			{"company": company, "is_default": 1, "disabled": 0},
+			"name",
+		)
+	if not name:
 		return None
 	doc = frappe.get_doc("Sales Taxes and Charges Template", name)
 	doc.check_permission("read")
@@ -253,6 +259,14 @@ def get_form(company):
 	for row in accessible_suppliers:
 		if customer := _linked_customer_for_supplier(row.name):
 			supplier_buyers.append({**row, "customer": customer})
+	tax_templates = frappe.get_list(
+		"Sales Taxes and Charges Template",
+		filters={"company": company, "disabled": 0},
+		fields=["name", "title", "is_default"],
+		order_by="is_default desc, title asc",
+		page_length=0,
+	)
+	default_tax_template = next((row.name for row in tax_templates if row.is_default), None)
 	return {
 		"company": company,
 		"posting_date": nowdate(),
@@ -277,13 +291,8 @@ def get_form(company):
 			}
 			for row in items
 		],
-		"tax_templates": frappe.get_list(
-			"Sales Taxes and Charges Template",
-			filters={"company": company, "disabled": 0},
-			fields=["name", "title", "is_default"],
-			order_by="is_default desc, title asc",
-			page_length=0,
-		),
+		"tax_templates": tax_templates,
+		"default_tax_template": default_tax_template,
 	}
 
 
