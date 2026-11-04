@@ -332,7 +332,7 @@ def _sales_vehicle_options(doctype, company, source=None):
 		fields=[
 			"name", "vin", "chassis_number", "item_code", "item_name", "brand", "model",
 			"color", "warehouse", "vehicle_status", "vehicle_import_file", "sales_order",
-			"selling_rate", "final_valuation_rate",
+			"selling_rate", "final_valuation_rate", "specification_template",
 		],
 		order_by="vin asc",
 		limit=500,
@@ -390,7 +390,16 @@ def _sales_form_options(company, doctype, source=None):
 	if not company:
 		frappe.throw(_("Company is required."))
 	frappe.get_doc("Company", company).check_permission("read")
+	quotation_options = {}
+	if doctype == "Quotation":
+		quotation_options = {
+			"price_lists": frappe.get_list("Price List", filters={"selling": 1, "enabled": 1}, fields=["name", "currency"], page_length=100),
+			"selling_price_list": frappe.db.get_single_value("Selling Settings", "selling_price_list"),
+			"tax_templates": frappe.get_list("Sales Taxes and Charges Template", filters={"company": company, "disabled": 0}, pluck="name", page_length=100),
+			"bank_accounts": frappe.get_list("Bank Account", filters={"company": company, "is_company_account": 1, "disabled": 0}, pluck="name", page_length=100) if frappe.has_permission("Bank Account", "read") else [],
+		}
 	return {
+		**quotation_options,
 		"company": company,
 		"currency": frappe.get_cached_value("Company", company, "default_currency"),
 		"customers": frappe.get_list(
@@ -423,9 +432,22 @@ def _apply_default_sales_taxes(doc):
 
 
 @frappe.whitelist(methods=["GET"])
-def get_sales_form(doctype, source=None, company=None):
+def get_sales_form(doctype, source=None, company=None, document=None):
 	require_access()
 	_require_sales_doctype(doctype)
+	if document:
+		if doctype != "Quotation":
+			frappe.throw(_("Unsupported resource"))
+		doc = frappe.get_doc(doctype, document)
+		doc.check_permission("write")
+		_assert_portal_mutable(doc)
+		if doc.docstatus != 0:
+			frappe.throw(_("Only draft quotations can refresh specifications."))
+		return {"modified": cstr(doc.modified), **_sales_form_options(doc.company, doctype), **{key: doc.get(key) for key in (
+			"currency", "transaction_date", "valid_till", "remarks", "selling_price_list", "taxes_and_charges", "custom_company_bank_account")},
+			"remarks": doc.get("custom_vehicle_quotation_notes"),
+			"customer": doc.party_name, "items": [{**_form_item(row), "quotation_item_name": row.name, "max_qty": None, **{key: row.get(key) for key in (
+				"custom_vehicle_specification_template", "custom_vehicle_warranty_terms", "custom_vehicle_delivery_terms")}} for row in doc.items]}
 	if not frappe.has_permission(doctype, "create"):
 		frappe.throw(_("Not permitted to create {0}.").format(_(doctype)), frappe.PermissionError)
 	if doctype == "Quotation" or not source:
@@ -539,6 +561,9 @@ def _item_values(doc, row):
 	}
 	if doc.doctype == "Sales Order":
 		values["delivery_date"] = doc.get("delivery_date")
+	if doc.doctype == "Quotation":
+		for key in ("custom_vehicle_specification_template", "custom_vehicle_warranty_terms", "custom_vehicle_delivery_terms"):
+			values[key] = row.get(key)
 	return values
 
 
@@ -550,9 +575,18 @@ def _apply_items(doc, rows, source_field=None):
 	if len(import_files) == 1:
 		doc.set(CUSTOM_FIELD, next(iter(import_files)))
 	if not source_field:
+		existing = {row.name: row for row in doc.items} if doc.doctype == "Quotation" and not doc.is_new() else {}
 		doc.set("items", [])
 		for row in rows:
-			doc.append("items", _item_values(doc, row))
+			item = existing.pop(row.get("quotation_item_name"), None)
+			if item and item.item_code == row.item_code:
+				# Keep standard discounts, tax templates, UOMs, images and other
+				# fields that the simplified popup does not edit.
+				item.update(_item_values(doc, row))
+				item.idx = len(doc.items) + 1
+				doc.append("items", item)
+			else:
+				doc.append("items", _item_values(doc, row))
 		return
 	selected = {row.source_item: row for row in rows if row.source_item}
 	for item in list(doc.items):
@@ -581,16 +615,20 @@ def _apply_items(doc, rows, source_field=None):
 
 
 @frappe.whitelist(methods=["POST"])
-def create_sales_document(doctype, data=None, source=None, submit_now=0, idempotency_key=None):
+def create_sales_document(doctype, data=None, source=None, submit_now=0, idempotency_key=None, document=None):
 	require_access()
 	_require_sales_doctype(doctype)
-	if not frappe.has_permission(doctype, "create"):
+	if document and doctype != "Quotation":
+		frappe.throw(_("Unsupported resource"))
+	if not frappe.has_permission(doctype, "write" if document else "create"):
 		frappe.throw(_("Not permitted to create {0}.").format(_(doctype)), frappe.PermissionError)
 	data = frappe.parse_json(data) if isinstance(data, str) else frappe._dict(data or {})
 	if not idempotency_key:
 		frappe.throw(_("Unable to safely process this document. Please reopen the form and try again."))
-	cache_key = f"an_truck_portal:sales:{doctype}:{source or data.get('customer')}:{idempotency_key}"
+	actor = f"{frappe.session.user}:" if doctype == "Quotation" else ""
+	cache_key = f"an_truck_portal:sales:{doctype}:{actor}{document or source or data.get('customer')}:{idempotency_key}"
 	if existing := frappe.cache().get_value(cache_key):
+		frappe.get_doc(doctype, existing["name"]).check_permission("read")
 		return existing
 
 	if doctype == "Quotation" or not source:
@@ -602,7 +640,18 @@ def create_sales_document(doctype, data=None, source=None, submit_now=0, idempot
 		customer.check_permission("read")
 		company = frappe.get_doc("Company", data.get("company"))
 		company.check_permission("read")
-		doc = frappe.new_doc(doctype)
+		if document:
+			if doctype != "Quotation":
+				frappe.throw(_("Unsupported resource"))
+			doc = frappe.get_doc(doctype, document, for_update=True)
+			doc.check_permission("write")
+			_assert_portal_mutable(doc)
+			if data.get("modified") and data["modified"] != cstr(doc.modified):
+				frappe.throw(_("This record changed. Reload it before saving."), frappe.TimestampMismatchError)
+			if doc.docstatus != 0:
+				frappe.throw(_("Only draft quotations can refresh specifications."))
+		else:
+			doc = frappe.new_doc(doctype)
 		if doctype == "Quotation":
 			doc.quotation_to = "Customer"
 			doc.party_name = data.get("customer")
@@ -645,12 +694,23 @@ def create_sales_document(doctype, data=None, source=None, submit_now=0, idempot
 		else:
 			doc.posting_date = data.get("posting_date") or nowdate()
 			doc.due_date = data.get("due_date")
-	if data.get("remarks"):
-		doc.remarks = data.remarks
+	if "remarks" in data:
+		doc.set("custom_vehicle_quotation_notes" if doctype == "Quotation" else "remarks", data.remarks)
+	if doctype == "Quotation":
+		if "taxes_and_charges" in data and data.get("taxes_and_charges") != doc.taxes_and_charges:
+			doc.set("taxes", [])
+		for key in ("selling_price_list", "taxes_and_charges", "custom_company_bank_account"):
+			if key in data:
+				doc.set(key, data[key] or None)
+		if doc.taxes_and_charges:
+			tax = frappe.get_doc("Sales Taxes and Charges Template", doc.taxes_and_charges)
+			tax.check_permission("read")
+			if tax.company != doc.company or tax.disabled:
+				frappe.throw(_("Select a tax template belonging to the quotation company."))
 	_apply_default_sales_taxes(doc)
 	doc.run_method("set_missing_values")
 	doc.run_method("calculate_taxes_and_totals")
-	doc.insert()
+	doc.save() if document else doc.insert()
 	if cint(submit_now):
 		doc.submit()
 	result = {"doctype": doc.doctype, "name": doc.name, "docstatus": doc.docstatus, "status": doc.status}
@@ -765,7 +825,7 @@ def get_sales_document(doctype, document):
 			"rounded_total": doc.get("rounded_total"),
 			"outstanding_amount": doc.get("outstanding_amount"),
 			"paid_amount": doc.get("paid_amount"),
-			"remarks": doc.get("remarks"),
+			"remarks": doc.get("custom_vehicle_quotation_notes") if doctype == "Quotation" else doc.get("remarks"),
 		},
 		"items": items,
 		"attachments": _files(doctype, doc.name),
@@ -780,6 +840,7 @@ def get_sales_document(doctype, document):
 			and frappe.has_permission("Payment Entry", "create")
 		),
 		"can_submit": bool(doc.docstatus == 0 and doc.has_permission("submit")),
+		"can_write": bool(doc.docstatus == 0 and doc.has_permission("write") and not _completed_import_file(doc)),
 		"vehicle_deliveries": vehicle_deliveries,
 		"can_deliver_vehicle": can_deliver_vehicle,
 		"delivery_block_reason": delivery_block_reason,
@@ -791,8 +852,12 @@ def get_sales_document(doctype, document):
 @frappe.whitelist(methods=["GET"])
 def get_sales_print_options(doctype, document):
 	require_access()
-	_require_sales_doctype(doctype)
+	if doctype != "Payment Entry":
+		_require_sales_doctype(doctype)
 	doc = frappe.get_doc(doctype, document)
+	if doctype == "Payment Entry":
+		from an_truck.financial_vouchers import record
+		doc = record(document, "print")
 	from frappe.www.printview import validate_print
 
 	validate_print(doc)
@@ -809,6 +874,10 @@ def get_sales_print_options(doctype, document):
 			formats.append(row.name)
 	default_format = doc.get("pos_print_format") if doc.get("is_pos") else None
 	default_format = default_format or frappe.get_meta(doctype).default_print_format or "Standard"
+	if doctype == "Quotation" and "AN Truck - Unified Vehicle Quotation" in formats:
+		default_format = "AN Truck - Unified Vehicle Quotation"
+	if doctype == "Payment Entry" and "AN Truck Voucher" in formats:
+		default_format = "AN Truck Voucher"
 	if default_format not in formats:
 		default_format = "Standard"
 	return {

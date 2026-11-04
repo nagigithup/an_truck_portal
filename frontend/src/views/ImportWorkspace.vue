@@ -237,12 +237,6 @@ function submitReceipt() {
 	const normalized = vins.map((row) => row.vin).filter(Boolean);
 	if (!items.length)
 		return void (actionError.value = __("Select at least one quantity to receive."));
-	if (
-		receiptForm.value.items.some(
-			(row) => row.is_vehicle_item && Number(row.qty) > 0 && !row.specification_template,
-		)
-	)
-		return void (actionError.value = __("Select a Specification Template for every vehicle item."));
 	if (vins.some((row) => !row.vin))
 		return void (actionError.value = __("Enter every VIN before submitting the receipt."));
 	if (new Set(normalized).size !== normalized.length)
@@ -945,7 +939,6 @@ onMounted(load);
 											v-model="row.specification_template"
 											:label="__('Specification Template')"
 											:link="{ method: 'an_truck_portal.api.specifications.template_options', item_code: row.item_code }"
-											required
 										/>
 										<span v-else>—</span>
 									</td>

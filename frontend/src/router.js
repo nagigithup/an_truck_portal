@@ -23,8 +23,13 @@ import SparePartsSales from "./views/SparePartsSales.vue";
 import MaintenanceCenters from "./views/MaintenanceCenters.vue";
 import MaintenanceCenterDetail from "./views/MaintenanceCenterDetail.vue";
 import SpecificationTemplates from "./views/SpecificationTemplates.vue";
+import Vouchers from "./views/Vouchers.vue";
 
 const routes = [
+	{ path: "/vouchers", name: "vouchers", component: Vouchers },
+	{ path: "/vouchers/receipts", name: "receipt-vouchers", component: Vouchers, props: { direction: "Receive" } },
+	{ path: "/vouchers/payments", name: "payment-vouchers", component: Vouchers, props: { direction: "Pay" } },
+	{ path: "/vouchers/:name", name: "voucher-detail", component: Vouchers, props: true },
 	{ path: "/", name: "home", component: Dashboard, meta: { title: "Home" } },
 	{ path: "/specification-templates", name: "specification-templates", component: SpecificationTemplates },
 	{ path: "/:resource(customers|suppliers)", name: "parties", component: Parties, props: true },

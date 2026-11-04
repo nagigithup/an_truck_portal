@@ -134,7 +134,7 @@ defineExpose({ refresh: () => search(props.modelValue || "") });
 			@input="emit('update:modelValue', $event.target.value)"
 		/>
 		<datalist v-if="link" :id="`${id}-options`">
-			<option v-for="value in suggestions" :key="value" :value="value" />
+			<option v-for="value in suggestions" :key="value.value ?? value.name ?? value" :value="value.value ?? value.name ?? value" :label="value.label" />
 		</datalist>
 		<small v-if="error" :id="`${id}-error`" class="error">{{ __(error) }}</small>
 	</div>

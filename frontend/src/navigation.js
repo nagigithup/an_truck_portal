@@ -49,6 +49,11 @@ export const navigation = [
 			["/warranty/coverage-categories", "Coverage Categories", "Warranty Coverage Category"],
 		],
 	},
+	{ label: "Financial Vouchers", items: [
+		["/vouchers/receipts", "Receipt Voucher", "Payment Entry"],
+		["/vouchers/payments", "Payment Voucher", "Payment Entry"],
+		["/vouchers", "All Vouchers", "Payment Entry"],
+	]},
 ];
 export function recordLocation(record) {
 	if (

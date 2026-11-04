@@ -6,6 +6,7 @@ import SupplierPaymentDialog from "../components/SupplierPaymentDialog.vue";
 import VehicleDeliveryDialog from "../components/VehicleDeliveryDialog.vue";
 import DocumentPrintDialog from "../components/DocumentPrintDialog.vue";
 import WarrantyDialog from "../components/WarrantyDialog.vue";
+import ConfirmDialog from "../components/ConfirmDialog.vue";
 
 const props = defineProps({ name: String, doctype: String, spareParts: Boolean });
 const { notification } = inject("portal");
@@ -17,6 +18,15 @@ const paymentDialog = ref(null);
 const deliveryDialog = ref(null);
 const printDialog = ref(null);
 const warrantyDialog = ref(null);
+const refreshConfirm = ref(null);
+const quotationDialog = ref(null);
+async function refreshSpecifications() {
+	if (!(await refreshConfirm.value.ask())) return;
+	try {
+		await call("an_truck_portal.api.vehicle_quotation.refresh_specifications", { name: props.name }, true);
+		await load(true);
+	} catch (e) { error.value = e.message; notification.value = e.message; }
+}
 const salesDocument = computed(() => result.value?.document || {});
 const listRoute = computed(() => props.spareParts ? "/spare-parts/sales" : ({
 	Quotation: "/quotations",
@@ -133,6 +143,8 @@ watch([() => props.name, () => props.doctype], () => load());
 							{{ __("Deliver Vehicle") }}
 						</button>
 						<button type="button" class="button secondary small" @click="printDialog.open()">{{ __("Print") }}</button>
+						<button v-if="doctype === 'Quotation' && salesDocument.docstatus === 0 && result.can_write" type="button" class="button secondary small" @click="refreshSpecifications">{{ __('Refresh Quotation Specifications') }}</button>
+						<button v-if="doctype === 'Quotation' && result.can_write" type="button" class="button secondary small" @click="quotationDialog.open(name)">{{ __('Edit Quotation') }}</button>
 						<a v-if="!spareParts" class="button secondary small" :href="result.desk_url" target="_blank" rel="noopener">{{ __("Open in Desk") }}</a>
 					</div>
 					<p v-if="result.delivery_block_reason" class="notice compact" role="status">
@@ -194,6 +206,8 @@ watch([() => props.name, () => props.doctype], () => load());
 				@confirmed="load(true)"
 			/>
 			<DocumentPrintDialog ref="printDialog" :doctype="doctype" :document-name="salesDocument.name" />
+			<ConfirmDialog ref="refreshConfirm" title="Refresh Quotation Specifications" message="Refresh the draft quotation specifications and terms?" confirm-label="Refresh" cancel-label="Cancel" />
+			<SalesDocumentDialog v-if="doctype === 'Quotation'" ref="quotationDialog" doctype="Quotation" @created="load(true)" />
 			<WarrantyDialog v-if="doctype === 'Sales Invoice' && result.warranty_context" ref="warrantyDialog" :sales-invoice="salesDocument.name" :context="result.warranty_context" @created="load(true)" />
 		</template>
 	</div>

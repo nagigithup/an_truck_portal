@@ -27,7 +27,7 @@ function printViewUrl() {
 		doctype: props.doctype,
 		name: props.documentName,
 		format: selectedFormat.value || "Standard",
-		no_letterhead: "0",
+		no_letterhead: props.doctype === "Payment Entry" && selectedFormat.value === "AN Truck Voucher" ? "1" : "0",
 		_lang: globalThis.document?.documentElement?.lang || "en",
 	});
 	return `/printview?${params.toString()}`;

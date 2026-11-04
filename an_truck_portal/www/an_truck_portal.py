@@ -62,6 +62,7 @@ def get_context(context):
 	allowed = can_open()
 	assets = _asset_manifest()
 	boot = {"csrf_token": get_csrf_token(), "user": frappe.session.user,
+		"portal_language": frappe.defaults.get_user_default("an_truck_portal_language") or "ar",
 		"full_name": frappe.db.get_value("User", frappe.session.user, "full_name"), "allowed": allowed,
 		"app_title": "AN Truck Portal", "version": __version__, "asset_version": assets["version"], "lang": lang, "rtl": is_rtl(),
 		"today": nowdate(), "now": now(), "timezone": get_system_timezone(), "desk_url": "/app",

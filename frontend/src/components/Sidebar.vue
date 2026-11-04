@@ -7,13 +7,14 @@ import IconUsers from "~icons/lucide/users";
 import IconShield from "~icons/lucide/shield-check";
 import IconPackage from "~icons/lucide/package";
 import IconClose from "~icons/lucide/x";
+import IconBanknote from "~icons/lucide/banknote";
 import { navigation } from "../navigation";
 import { __ } from "../i18n";
 const props = defineProps({ open: Boolean, ctx: Object });
 const emit = defineEmits(["close"]);
 const sidebar = ref(null),
 	closeButton = ref(null);
-const icons = [IconShip, IconShopping, IconUsers, IconPackage, IconShield];
+const icons = [IconShip, IconShopping, IconUsers, IconPackage, IconShield, IconBanknote];
 const itemIcons = { "/vehicles": IconTruck };
 const groups = computed(() =>
 	navigation
@@ -87,7 +88,7 @@ function trap(event) {
 					:to="item[0]"
 					:class="{
 						'nav-active':
-							item[0] === '/'
+						item[0] === '/' || item[0] === '/vouchers'
 								? $route.path === '/'
 								: $route.path === item[0] || $route.path.startsWith(`${item[0]}/`),
 					}"

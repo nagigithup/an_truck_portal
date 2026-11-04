@@ -7,11 +7,9 @@ try {
 	saved = localStorage.getItem("an-truck-language");
 } catch {}
 export const language = ref(
-	["ar", "en"].includes(saved)
-		? saved
-		: window.anTruckBoot?.lang?.startsWith("ar")
-			? "ar"
-			: "en",
+	["ar", "en"].includes(saved ?? window.anTruckBoot?.portal_language)
+		? (saved ?? window.anTruckBoot?.portal_language)
+		: "ar",
 );
 export function __(key, values = []) {
 	let text =

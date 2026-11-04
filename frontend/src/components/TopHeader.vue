@@ -6,7 +6,8 @@ import IconRefresh from "~icons/lucide/refresh-cw";
 import IconUser from "~icons/lucide/user-round";
 import SearchInput from "./SearchInput.vue";
 import { boot, call } from "../api";
-import { __, language } from "../i18n";
+import { __ } from "../i18n";
+import LanguageSwitch from "./LanguageSwitch.vue";
 import { recordLocation } from "../navigation";
 const props = defineProps({ ctx: Object, open: Boolean });
 const emit = defineEmits(["menu", "company", "refresh"]);
@@ -101,14 +102,7 @@ onBeforeUnmount(() => {
 					</option>
 				</select></label
 			>
-			<button
-				class="language-switch"
-				:aria-label="__('Language')"
-				@click="language = language === 'ar' ? 'en' : 'ar'"
-			>
-				<span lang="ar">العربية</span><span aria-hidden="true"> / </span
-				><span lang="en">EN</span>
-			</button>
+			<LanguageSwitch />
 			<button
 				class="icon"
 				:title="__('Refresh')"

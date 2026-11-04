@@ -5,6 +5,7 @@ import FormField from "../components/FormField.vue";
 import LinkedVehiclesDialog from "../components/LinkedVehiclesDialog.vue";
 const rows = ref([]), hasMore = ref(false), page = ref(1), search = ref(""), error = ref(""), loading = ref(false), canCreate = ref(false);
 const dialog = ref(null), current = ref(null), values = ref({}), busy = ref(false), linked = ref(null), attachments = ref({});
+const additionalPhotos = ref([]);
 const base = "an_truck_portal.api.specifications.";
 const { ctx } = inject("portal");
 const visibleSections = computed(() => (current.value?.sections || [])
@@ -17,6 +18,7 @@ async function load() {
 }
 async function open(name = null) {
 	error.value = ""; attachments.value = {};
+	additionalPhotos.value = [];
 	try { current.value = await call(base + "get_template", { name, company: ctx.company }); values.value = Object.fromEntries(current.value.sections.flatMap(s => s.fields.map(f => [f.fieldname, f.value ?? ""]))); dialog.value.showModal(); }
 	catch (e) { error.value = e.message; }
 }
@@ -38,6 +40,7 @@ async function save() {
 			const fresh = await call(base + "get_template", { name: result.name });
 			await call(base + "save_template", { name: result.name, modified: fresh.modified, values: { [fieldname]: uploaded.file_url } }, true);
 		}
+		for (const file of additionalPhotos.value) await uploadFile(file, "Vehicle Specification Template", result.name);
 		dialog.value.close(); await load(); await open(result.name);
 		return result.name;
 	} catch (e) { error.value = e.message; } finally { busy.value = false; }
@@ -46,6 +49,16 @@ async function action(method) {
 	if (method === "publish_template" && !(await save())) return;
 	busy.value = true; error.value = "";
 	try { const result = await call(base + method, { name: current.value.name }, true); dialog.value.close(); await load(); await open(result.name); }
+	catch (e) { error.value = e.message; } finally { busy.value = false; }
+}
+async function removePhoto(photo) {
+	busy.value = true;
+	try {
+		const result = await call(base + "remove_photo", { name: current.value.name, photo: photo.name, modified: current.value.modified }, true);
+		current.value.modified = result.modified;
+		current.value.photos = current.value.photos.filter(row => row.name !== photo.name);
+		for (const field of ["main_vehicle_photo", "technical_photo", "cabin_photo"]) if (values.value[field] === photo.file_url) values.value[field] = "";
+	}
 	catch (e) { error.value = e.message; } finally { busy.value = false; }
 }
 onMounted(load);
@@ -71,6 +84,8 @@ onMounted(load);
 						</template>
 					</div></section>
 					<p v-if="error" class="form-error" role="alert">{{ __(error) }}</p>
+					<label v-if="current.status === 'Draft' && current.can_write" class="form-field"><span>{{ __('Additional Technical Photos') }}</span><input type="file" accept="image/jpeg,image/png,image/webp,image/gif" multiple :disabled="busy" @change="additionalPhotos = Array.from($event.target.files || [])" /></label>
+					<div v-if="current.photos?.length" class="template-photo-gallery"><div v-for="photo in current.photos" :key="photo.name"><a :href="photo.file_url" target="_blank" rel="noopener"><img :src="photo.file_url" :alt="photo.file_name" /></a><button v-if="current.status === 'Draft' && current.can_write" type="button" class="text-button" :disabled="busy" @click="removePhoto(photo)">{{ __('Delete') }}</button></div></div>
 				</div>
 				<div class="dialog-actions"><button type="button" class="button secondary" :disabled="busy" @click="dialog.close()">{{ __("Close") }}</button><button v-if="current.can_write" class="button" :disabled="busy">{{ __("Save") }}</button><button v-if="current.name && current.status === 'Draft' && current.can_write" type="button" class="button" :disabled="busy" @click="action('publish_template')">{{ __("Publish Template") }}</button><button v-if="current.status === 'Published' && current.can_create" type="button" class="button" :disabled="busy" @click="action('create_revision')">{{ __("Create New Revision") }}</button></div>
 			</form>
@@ -78,3 +93,8 @@ onMounted(load);
 		<LinkedVehiclesDialog v-if="current?.name" ref="linked" :template="current.name" />
 	</div>
 </template>
+<style scoped>
+.template-photo-gallery {display:flex;flex-wrap:wrap;gap:12px;}
+.template-photo-gallery > div {display:flex;flex-direction:column;align-items:center;max-width:160px;}
+.template-photo-gallery img {width:150px;height:110px;object-fit:contain;}
+</style>

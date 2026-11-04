@@ -6,6 +6,7 @@ from frappe.utils import cint
 
 from an_truck_portal.access import require_access, require_read
 from an_truck.an_truck.doctype.vehicle_specification_template import vehicle_specification_template as domain
+from an_truck.vehicle_quotation import ASSET_FIELDS, template_photos
 
 DOCTYPE = "Vehicle Specification Template"
 
@@ -66,6 +67,7 @@ def get_template(name=None, company=None):
 			] if field.fieldtype == "Table" else doc.get(field.fieldname),
 		})
 	return {"name": name, "modified": str(doc.modified) if name else None,
+		"photos": template_photos(name) if name else [],
 		"sections": [s for s in sections if s["fields"]], "status": doc.status,
 		"can_write": bool(doc.has_permission("write") if name else frappe.has_permission(DOCTYPE, "create")),
 		"can_create": bool(frappe.has_permission(DOCTYPE, "create")),
@@ -109,6 +111,26 @@ def publish_template(name):
 def create_revision(name):
 	require_access()
 	return domain.create_revision(name)
+
+
+@frappe.whitelist(methods=["POST"])
+def remove_photo(name, photo, modified):
+	require_access()
+	doc = domain._template(name, "write")
+	if doc.status != "Draft" or doc.published_on:
+		frappe.throw(_("Published template revisions are immutable. Create a new revision."))
+	if str(doc.modified) != str(modified):
+		frappe.throw(_("This record changed. Reload it before saving."), frappe.TimestampMismatchError)
+	file = frappe.get_doc("File", photo)
+	file.check_permission("delete")
+	if file.attached_to_doctype != DOCTYPE or file.attached_to_name != name:
+		frappe.throw(_("Not permitted"), frappe.PermissionError)
+	for field in ASSET_FIELDS:
+		if doc.get(field) == file.file_url:
+			doc.set(field, None)
+	doc.save()
+	file.delete()
+	return {"modified": str(doc.modified)}
 
 
 @frappe.whitelist()

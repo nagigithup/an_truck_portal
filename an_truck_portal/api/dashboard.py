@@ -19,7 +19,7 @@ def get_dashboard(company=None):
 	cards = [
 		("Open Vehicle Import Files", "Vehicle Import File", {**cf, "status": ["not in", ["Completed", "Cancelled"]]}),
 		("Awaiting VIN Entry", "Vehicle Import File", {**cf, "total_remaining_vehicles": [">", 0]}),
-		("Awaiting Vehicle Master Completion", "Vehicle Master", {**cf, "specification_template": ["is", "not set"]}),
+		("Vehicles Without Specification Template", "Vehicle Master", {**cf, "specification_template": ["is", "not set"]}),
 		("Vehicles Ready for Sale", "Vehicle Master", {**cf, "vehicle_status": "Available"}),
 		("Open Sales Orders", "Sales Order", {**cf, "docstatus": 1, "status": ["not in", ["Completed", "Closed"]]}),
 		("Unpaid Customer Invoices", "Sales Invoice", {**cf, "docstatus": 1, "outstanding_amount": [">", 0]}),
