@@ -1014,5 +1014,17 @@
   "Sold Vehicles": "المركبات المباعة",
   "Remaining Vehicles": "المركبات المتبقية",
   "Vehicle receipt read permission is required.": "يلزم توفر صلاحية قراءة استلام المركبات.",
-  "Sales Invoice and Delivery Note read permissions are required.": "يلزم توفر صلاحيات قراءة فواتير المبيعات وأذونات التسليم."
+  "Sales Invoice and Delivery Note read permissions are required.": "يلزم توفر صلاحيات قراءة فواتير المبيعات وأذونات التسليم.",
+  "Purchase Value (Invoice Currency)": "قيمة الشراء (عملة الفاتورة)",
+  "Paid Amount (Invoice Currency)": "المبلغ المدفوع (عملة الفاتورة)",
+  "Outstanding Amount (Invoice Currency)": "المبلغ المستحق (عملة الفاتورة)",
+  "Purchase Value (SAR)": "قيمة الشراء (ريال سعودي)",
+  "Paid Amount (SAR)": "المبلغ المدفوع (ريال سعودي)",
+  "Outstanding Amount (SAR)": "المبلغ المستحق (ريال سعودي)",
+  "Mixed Invoice Currencies": "فواتير بعملات متعددة",
+  "Financial amounts use submitted purchase invoices and recorded allocations. Invoice currencies are shown separately; SAR equivalents use recorded accounting conversions.": "تعتمد المبالغ على فواتير الشراء المعتمدة والتخصيصات المسجلة. تُعرض كل عملة فاتورة منفصلة، ويُحسب المقابل بالريال من القيم المحاسبية المسجلة.",
+  "No submitted purchase invoices are linked.": "لا توجد فواتير شراء معتمدة مرتبطة.",
+  "Invoice currency is missing.": "عملة الفاتورة غير محددة.",
+  "No recorded SAR conversion is available.": "لا تتوفر قيم تحويل مسجلة إلى الريال السعودي.",
+  "The recorded invoice or account conversion is unavailable.": "لا يتوفر التحويل المسجل لعملة الفاتورة أو الحساب."
 }

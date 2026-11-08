@@ -279,6 +279,17 @@ class TestImportFileList(IntegrationTestCase):
 	def metric(self,file=None):
 		return next(row for row in self.listing()['rows'] if row.name==(file or self.first).name)
 
+	def assert_invoice_amounts(self,expected,sar,file=None):
+		row=self.metric(file)
+		for index,field in enumerate(('purchase_value','paid_amount','outstanding_amount')):
+			self.assertIsNotNone(row[field+'_invoice_currency'],row._invoice_finance_issue)
+			self.assertEqual({value['currency'] for value in row[field+'_invoice_currency']},set(expected))
+			for value in row[field+'_invoice_currency']:
+				self.assertAlmostEqual(value['amount'],expected[value['currency']][index],places=5)
+			self.assertIsNotNone(row[field+'_sar'],row._sar_finance_issue)
+			self.assertEqual(row[field+'_sar'][0]['currency'],'SAR')
+			self.assertAlmostEqual(row[field+'_sar'][0]['amount'],sar[index],places=5)
+
 	def test_real_allocations_shared_payment_returns_and_cancellations(self):
 		self.finance_party()
 		self.order('first',self.first,currency='SAR',amount=100)
@@ -289,27 +300,38 @@ class TestImportFileList(IntegrationTestCase):
 		self.assertEqual(self.metric().paid_amount[0]['amount'],50)
 		self.assertEqual(self.metric(self.second).paid_amount[0]['amount'],20)
 		self.assertEqual(self.metric().outstanding_amount[0]['amount'],50)
+		self.assert_invoice_amounts({'SAR':(100,50,50)},(100,50,50))
+		self.assert_invoice_amounts({'SAR':(100,20,80)},(100,20,80),self.second)
 		from erpnext.accounts.doctype.purchase_invoice.purchase_invoice import make_debit_note
 		credit=make_debit_note(first.name)
 		credit.items[0].qty=-1
 		credit.insert();credit.submit()
 		self.assertEqual(self.metric().paid_amount[0]['amount'],50)
 		self.assertEqual(self.metric().outstanding_amount[0]['amount'],30)
+		self.assert_invoice_amounts({'SAR':(80,50,30)},(80,50,30))
 		credit.cancel()
 		self.assertEqual(self.metric().outstanding_amount[0]['amount'],50)
 		from an_truck import financial_vouchers as payments
 		payments.act(payment,'cancel')
 		self.assertEqual(self.metric().paid_amount[0]['amount'],0)
 		self.assertEqual(self.metric().outstanding_amount[0]['amount'],100)
+		self.assert_invoice_amounts({'SAR':(100,0,100)},(100,0,100))
+		first.reload();first.cancel()
+		self.assertIsNone(self.metric().purchase_value_invoice_currency)
+		self.assertIsNone(self.metric().paid_amount_sar)
+		self.assertEqual(self.metric()._invoice_finance_issue,'No submitted purchase invoices are linked.')
+		self.assert_invoice_amounts({'SAR':(100,0,100)},(100,0,100),self.second)
 
 	def test_advance_is_counted_only_after_invoice_allocation(self):
 		self.finance_party()
 		self.order('advance',self.first,currency='SAR',amount=100)
 		advance=self.payment(30)
 		self.assertEqual(self.metric().paid_amount[0]['amount'],0)
+		self.assertIsNone(self.metric().paid_amount_invoice_currency)
 		self.invoice(advance=advance)
 		self.assertEqual(self.metric().paid_amount[0]['amount'],30)
 		self.assertEqual(self.metric().outstanding_amount[0]['amount'],70)
+		self.assert_invoice_amounts({'SAR':(100,30,70)},(100,30,70))
 
 	def test_legacy_invoice_item_links_and_ambiguous_shared_invoice(self):
 		self.finance_party()
@@ -351,6 +373,67 @@ class TestImportFileList(IntegrationTestCase):
 		self.assertEqual(row.purchase_value,[{'currency':'SAR','amount':100*rate}])
 		self.assertEqual(row.paid_amount,[{'currency':'SAR','amount':75.0}])
 		self.assertAlmostEqual(row.outstanding_amount[0]['amount'],100*rate-75,places=2)
+		self.assert_invoice_amounts({'USD':(100,75/rate,100-75/rate)},(100*rate,75,100*rate-75))
+
+	def test_mixed_invoice_currencies_and_company_currency_payable_allocations(self):
+		# A company-currency payable account natively permits invoices in several
+		# currencies after the first posting. No Accounts Settings are changed.
+		self.finance_party()
+		self.order('unbilled commitment',self.first,currency='SAR',amount=9000)
+		sar=self.invoice(amount=100)
+		usd=self.invoice(amount=100,currency='USD',exchange_rate=4.2)
+		self.invoice(amount=50,currency='EUR',exchange_rate=5.7)
+		self.assertEqual(usd.party_account_currency,'SAR')
+		self.payment(104,[{'reference_doctype':'Purchase Invoice','reference_name':usd.name,'allocated_amount':84},
+			{'reference_doctype':'Purchase Invoice','reference_name':sar.name,'allocated_amount':20}])
+		self.assert_invoice_amounts({'EUR':(50,0,50),'SAR':(100,20,80),'USD':(100,20,80)},(805,104,701))
+		from erpnext.accounts.doctype.purchase_invoice.purchase_invoice import make_debit_note
+		credit=make_debit_note(usd.name);credit.items[0].qty=-1
+		credit.insert();credit.submit()
+		self.assert_invoice_amounts({'EUR':(50,0,50),'SAR':(100,20,80),'USD':(80,20,60)},(721,104,617))
+		# Reconciliation of a formerly unallocated SAR advance against USD debt
+		# must convert the allocation at the original USD invoice conversion.
+		advance=self.payment(21)
+		self.assert_invoice_amounts({'EUR':(50,0,50),'SAR':(100,20,80),'USD':(80,20,60)},(721,104,617))
+		rec=frappe.new_doc('Payment Reconciliation')
+		rec.update({'company':self.company,'party_type':'Supplier','party':self.supplier,
+			'receivable_payable_account':usd.credit_to})
+		rec.get_unreconciled_entries()
+		rec.allocate_entries({'invoices':[r.as_dict() for r in rec.invoices if r.invoice_number==usd.name],
+			'payments':[r.as_dict() for r in rec.payments if r.reference_name==advance]})
+		rec.reconcile()
+		self.assert_invoice_amounts({'EUR':(50,0,50),'SAR':(100,20,80),'USD':(80,25,55)},(721,125,596))
+		# Export uses the same three native-currency lines and SAR equivalents.
+		from an_truck_portal.api import import_file_excel
+		from openpyxl import load_workbook
+		from io import BytesIO
+		import_file_excel.export(company=self.company,search=self.first.name)
+		book=load_workbook(BytesIO(frappe.local.response.filecontent))
+		values=next(v for v in list(book.active.values)[1:] if v[0]==self.first.name)
+		self.assertEqual(values[5],'50.0 EUR\n100.0 SAR\n80.0 USD')
+		self.assertEqual(values[6],'0.0 EUR\n20.0 SAR\n25.0 USD')
+		self.assertEqual(values[7],'50.0 EUR\n80.0 SAR\n55.0 USD')
+		self.assertEqual(values[11:],('721.0 SAR','125.0 SAR','596.0 SAR'))
+		book.close()
+		credit.cancel()
+		self.assert_invoice_amounts({'EUR':(50,0,50),'SAR':(100,20,80),'USD':(100,25,75)},(805,125,680))
+
+	def test_missing_sar_or_invoice_conversion_is_not_guessed(self):
+		from an_truck_portal.import_file_metrics import _invoice_currency_totals
+		file=frappe._dict(company_currency='SDG')
+		invoice=frappe._dict(name='invoice',currency='EUR',grand_total=100,base_grand_total=150,conversion_rate=1.5)
+		entry=frappe._dict(against_voucher_no='invoice',account_currency='EUR',amount_in_account_currency=100,amount=150)
+		issues={}
+		totals,sar_issues=_invoice_currency_totals({'file':file},{'invoice':invoice},{'invoice':'file'},[(entry,False)],issues)
+		self.assertFalse(issues)
+		self.assertEqual(totals['file']['EUR']['outstanding_amount'],100)
+		self.assertEqual(sar_issues['file'],'No recorded SAR conversion is available.')
+		entry.account_currency='SDG';invoice.conversion_rate=0
+		_invoice_currency_totals({'file':file},{'invoice':invoice},{'invoice':'file'},[(entry,False)],issues)
+		self.assertEqual(issues['file'],'The recorded invoice or account conversion is unavailable.')
+		file.company_currency='SAR';invoice.conversion_rate=1.5;invoice.base_grand_total=0
+		_,sar_issues=_invoice_currency_totals({'file':file},{'invoice':invoice},{'invoice':'file'},[],{})
+		self.assertEqual(sar_issues['file'],'No recorded SAR conversion is available.')
 
 	def test_cash_journal_and_non_cash_adjustment_are_distinct(self):
 		from frappe.utils import nowdate
@@ -365,6 +448,7 @@ class TestImportFileList(IntegrationTestCase):
 			journal.insert();journal.submit()
 		self.assertEqual(self.metric().paid_amount[0]['amount'],20)
 		self.assertEqual(self.metric().outstanding_amount[0]['amount'],70)
+		self.assert_invoice_amounts({'SAR':(100,20,70)},(100,20,70))
 
 	def test_late_payment_reconciliation_updates_the_same_invoice_allocation(self):
 		co=self.finance_party()
@@ -382,6 +466,7 @@ class TestImportFileList(IntegrationTestCase):
 		rec.reconcile()
 		self.assertEqual(self.metric().paid_amount[0]['amount'],30)
 		self.assertEqual(self.metric().outstanding_amount[0]['amount'],70)
+		self.assert_invoice_amounts({'SAR':(100,30,70)},(100,30,70))
 
 	def workbook(self,values):
 		import base64
@@ -459,6 +544,6 @@ class TestImportFileList(IntegrationTestCase):
 				data=list(book.active.values)
 				self.assertEqual(list(data[0]),[excel._label(label) for label in COLUMNS.values()])
 				self.assertEqual(len(data),3)
-				self.assertEqual(len(data[0]),11)
+				self.assertEqual(len(data[0]),14)
 				self.assertEqual(book.active.sheet_view.rightToLeft,True if lang=='ar' else None)
 				book.close()

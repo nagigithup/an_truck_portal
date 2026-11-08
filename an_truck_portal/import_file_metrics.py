@@ -1,6 +1,6 @@
 """Read-only import commitments and standard Payment Ledger allocations.
 
-All amounts use stored company-currency values, never today's exchange rate.
+Amounts use stored transaction/accounting values, never today's exchange rate.
 Ambiguous legacy associations are unavailable rather than proportionally guessed.
 """
 from collections import defaultdict
@@ -13,9 +13,16 @@ LINK = "custom_vehicle_import_file"
 COLUMNS = {
 	"name":"Name", "supplier":"Supplier", "received_vehicles":"Received Vehicles",
 	"sold_vehicles":"Sold Vehicles", "remaining_vehicles":"Remaining Vehicles",
-	"purchase_value":"Purchase Value", "paid_amount":"Paid Amount", "outstanding_amount":"Outstanding Amount",
+	"purchase_value_invoice_currency":"Purchase Value (Invoice Currency)",
+	"paid_amount_invoice_currency":"Paid Amount (Invoice Currency)",
+	"outstanding_amount_invoice_currency":"Outstanding Amount (Invoice Currency)",
 	"status":"Status", "country_of_origin":"Country of Origin", "supplier_currency":"Supplier Currency",
+	"purchase_value_sar":"Purchase Value (SAR)", "paid_amount_sar":"Paid Amount (SAR)",
+	"outstanding_amount_sar":"Outstanding Amount (SAR)",
 }
+MONEY_COLUMNS = {key for key in COLUMNS if key.startswith(("purchase_value", "paid_amount", "outstanding_amount"))}
+INVOICE_FIELDS = ["name","company",LINK,"is_return","return_against","base_grand_total","supplier","credit_to",
+	"currency","grand_total","conversion_rate","party_account_currency"]
 
 
 def number(value):
@@ -162,12 +169,13 @@ def enrich(records):
 			elif visible:
 				purchase[next(iter(visible))] += number(order.base_grand_total)
 	paid, outstanding = defaultdict(Decimal),dict(purchase)
-	pi_fields = ["name","company",LINK,"is_return","return_against","base_grand_total","supplier","credit_to"]
-	can_finance = can_purchase and readable("Purchase Invoice",pi_fields) and readable("Payment Ledger Entry",
-		["name","company","account_type","party_type","party","account","voucher_type","voucher_no","against_voucher_type","against_voucher_no","amount","delinked"])
+	can_finance = can_purchase and readable("Purchase Invoice",INVOICE_FIELDS) and readable("Payment Ledger Entry",
+		["name","company","account_type","party_type","party","account","voucher_type","voucher_no","against_voucher_type","against_voucher_no","amount","account_currency","amount_in_account_currency","delinked"])
 	purchase_issues = dict(issues)
+	invoice_issues, invoice_totals, sar_issues = {},{},{}
 	if can_finance:
-		_finance(files,companies,orders,targets,legacy_pr,paid,outstanding,issues)
+		invoice_totals,sar_issues = _finance(files,companies,orders,targets,legacy_pr,paid,outstanding,invoice_issues)
+		issues.update(invoice_issues)
 	for r in records:
 		currency = r.get("company_currency")
 		issue = issues.get(r.name)
@@ -182,6 +190,14 @@ def enrich(records):
 			blocked = purchase_issues.get(r.name) if field=="purchase_value" else issue
 			r[field] = [{"currency":currency,"amount":float(values.get(r.name,0))}] if allowed and currency and not blocked else None
 		r["_finance_issue"] = issue or ("Accounting read permission is required." if not can_finance else "")
+		groups = invoice_totals.get(r.name,{})
+		invoice_issue = invoice_issues.get(r.name) or ("No submitted purchase invoices are linked." if not groups else "")
+		if not can_finance: invoice_issue = "Accounting read permission is required."
+		for field in ("purchase_value","paid_amount","outstanding_amount"):
+			r[field+"_invoice_currency"] = [{"currency":cur,"amount":float(values[field])} for cur,values in sorted(groups.items())] if not invoice_issue else None
+			r[field+"_sar"] = [{"currency":"SAR","amount":float(sum((values[field+"_sar"] for values in groups.values()),Decimal(0)))}] if not invoice_issue and not sar_issues.get(r.name) else None
+		r["_invoice_finance_issue"] = invoice_issue
+		r["_sar_finance_issue"] = invoice_issue or sar_issues.get(r.name,"")
 
 
 def _finance(files,companies,orders,targets,legacy_pr,paid,outstanding,issues):
@@ -194,7 +210,7 @@ def _finance(files,companies,orders,targets,legacy_pr,paid,outstanding,issues):
 			receipts[r.name] = {r[LINK]} if r[LINK] else set()
 		origins = legacy_origins("purchase_receipt",[key for key,value in receipts.items() if not value],companies)
 		for key,value in origins.items(): receipts[key] = value
-	fields = ["name","company",LINK,"is_return","return_against","base_grand_total","supplier","credit_to"]
+	fields = INVOICE_FIELDS
 	ors = [["Purchase Invoice",LINK,"in",names]]
 	if orders: ors.append(["Purchase Invoice","items.purchase_order","in",list(orders)])
 	if receipts: ors.append(["Purchase Invoice","items.purchase_receipt","in",list(receipts)])
@@ -203,7 +219,7 @@ def _finance(files,companies,orders,targets,legacy_pr,paid,outstanding,issues):
 		for r in rows("Purchase Invoice",fields,{"company":["in",companies],"docstatus":1,"return_against":["in",list(invoices)]}):
 			invoices[r.name] = r
 	if not invoices:
-		return
+		return {},{}
 	unassigned = [r.name for r in invoices.values() if not r[LINK] and not r.return_against]
 	item_links = defaultdict(list)
 	if unassigned:
@@ -235,8 +251,8 @@ def _finance(files,companies,orders,targets,legacy_pr,paid,outstanding,issues):
 	valid = {key:next(iter(linked)) for key,linked in assignments.items() if len(linked)==1 and next(iter(linked)) in files
 		and invoices[key].company==files[next(iter(linked))].company}
 	if not valid:
-		return
-	ledger = rows("Payment Ledger Entry",["name","company","party","account","voucher_type","voucher_no","against_voucher_no","amount"],
+		return {},{}
+	ledger = rows("Payment Ledger Entry",["name","company","party","account","voucher_type","voucher_no","against_voucher_no","amount","account_currency","amount_in_account_currency"],
 		{"company":["in",companies],"account_type":"Payable","party_type":"Supplier","delinked":0,
 		 "against_voucher_type":"Purchase Invoice","against_voucher_no":["in",list(valid)]})
 	pe_names = {r.voucher_no for r in ledger if r.voucher_type=="Payment Entry"}
@@ -251,28 +267,85 @@ def _finance(files,companies,orders,targets,legacy_pr,paid,outstanding,issues):
 			bank = {r.name for r in rows("Account",["name"],{"name":["in",list({r.account for r in accounts})],"account_type":["in",["Bank","Cash"]]})}
 			bank_journals = {r.name for r in accounts if r.account in bank}
 			unknown_journals = set()
-	seen, posted_invoices = set(),set()
+	seen, posted_invoices, accounting_rows = set(),set(),[]
 	for entry in ledger:
 		invoice = invoices[entry.against_voucher_no]
 		name = valid[entry.against_voucher_no]
 		if entry.name in seen or entry.company!=invoice.company or entry.party!=invoice.supplier or entry.account!=invoice.credit_to:
 			continue
 		seen.add(entry.name)
+		is_payment = False
 		if entry.voucher_type=="Purchase Invoice" and entry.voucher_no==invoice.name:
 			posted_invoices.add(invoice.name)
 		outstanding[name] = outstanding.get(name,Decimal(0)) + number(entry.amount)
 		if entry.voucher_type=="Payment Entry":
 			if payments.get(entry.voucher_no)!=invoice.company: issues[name]="Allocated payment documents are not readable or submitted."
-			else: paid[name] -= number(entry.amount)
+			else:
+				paid[name] -= number(entry.amount)
+				is_payment = True
 		elif entry.voucher_type=="Journal Entry":
 			if journals.get(entry.voucher_no)!=invoice.company: issues[name]="Allocated payment documents are not readable or submitted."
 			elif entry.voucher_no in unknown_journals: issues[name]="Accounting read permission is required."
-			elif entry.voucher_no in bank_journals: paid[name] -= number(entry.amount)
+			elif entry.voucher_no in bank_journals:
+				paid[name] -= number(entry.amount)
+				is_payment = True
+		accounting_rows.append((entry,is_payment))
 	for key,name in valid.items():
 		if not invoices[key].is_return:
 			outstanding[name] = outstanding.get(name,Decimal(0)) - number(invoices[key].base_grand_total)
 		if not invoices[key].is_return and number(invoices[key].base_grand_total) and key not in posted_invoices:
 			issues[name]="The invoice accounting ledger is incomplete."
+	return _invoice_currency_totals(files,invoices,valid,accounting_rows,issues)
+
+
+def _invoice_currency_totals(files,invoices,valid,ledger,issues):
+	"""Net invoiced purchase amounts and active allocations in two explicit views.
+
+	PLE account amounts are already in invoice currency for foreign payable accounts.
+	For company-currency payables, use the invoice's stored conversion_rate. No
+	current rate, supplier-currency guess or proportional payment split is used.
+	"""
+	totals = defaultdict(lambda: defaultdict(lambda: defaultdict(Decimal)))
+	sar_issues = {}
+	for key,name in valid.items():
+		invoice = invoices[key]
+		if not invoice.currency:
+			issues[name] = "Invoice currency is missing."
+			continue
+		values = totals[name][invoice.currency]
+		values["purchase_value"] += number(invoice.grand_total)
+		if files[name].company_currency=="SAR":
+			if number(invoice.grand_total) and (not number(invoice.base_grand_total) or number(invoice.conversion_rate)<=0):
+				sar_issues[name] = "No recorded SAR conversion is available."
+			else:
+				values["purchase_value_sar"] += number(invoice.base_grand_total)
+		elif invoice.currency=="SAR":
+			values["purchase_value_sar"] += number(invoice.grand_total)
+		else:
+			sar_issues[name] = "No recorded SAR conversion is available."
+	for entry,is_payment in ledger:
+		invoice = invoices[entry.against_voucher_no]
+		name = valid[invoice.name]
+		if not invoice.currency: continue
+		values = totals[name][invoice.currency]
+		if entry.account_currency==invoice.currency:
+			amount = number(entry.amount_in_account_currency)
+		elif entry.account_currency==files[name].company_currency and number(invoice.conversion_rate)>0:
+			amount = number(entry.amount_in_account_currency)/number(invoice.conversion_rate)
+		else:
+			issues[name] = "The recorded invoice or account conversion is unavailable."
+			continue
+		values["outstanding_amount"] += amount
+		if is_payment: values["paid_amount"] -= amount
+		if files[name].company_currency=="SAR":
+			sar_amount = number(entry.amount)
+		elif invoice.currency=="SAR":
+			sar_amount = amount
+		else:
+			continue
+		values["outstanding_amount_sar"] += sar_amount
+		if is_payment: values["paid_amount_sar"] -= sar_amount
+	return totals,sar_issues
 
 
 def _read_vouchers(dt,names):

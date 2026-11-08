@@ -186,12 +186,15 @@ const importFileColumns = {
 	received_vehicles: "Received Vehicles",
 	sold_vehicles: "Sold Vehicles",
 	remaining_vehicles: "Remaining Vehicles",
-	purchase_value: "Purchase Value",
-	paid_amount: "Paid Amount",
-	outstanding_amount: "Outstanding Amount",
+	purchase_value_invoice_currency: "Purchase Value (Invoice Currency)",
+	paid_amount_invoice_currency: "Paid Amount (Invoice Currency)",
+	outstanding_amount_invoice_currency: "Outstanding Amount (Invoice Currency)",
 	status: "Status",
 	country_of_origin: "Country of Origin",
 	supplier_currency: "Supplier Currency",
+	purchase_value_sar: "Purchase Value (SAR)",
+	paid_amount_sar: "Paid Amount (SAR)",
+	outstanding_amount_sar: "Outstanding Amount (SAR)",
 };
 
 function vehicleColumns(row = {}) {
@@ -268,7 +271,7 @@ async function customerPaymentCreated(result) {
 			<div>
 				<p class="eyebrow">{{ __("Records") }}</p>
 				<h1>{{ __(doctype) }}</h1>
-				<small v-if="resource === 'import-files'">{{ __('Financial amounts use company currency and recorded exchange rates. Outstanding includes credits and accounting adjustments.') }}</small>
+				<small v-if="resource === 'import-files'">{{ __('Financial amounts use submitted purchase invoices and recorded allocations. Invoice currencies are shown separately; SAR equivalents use recorded accounting conversions.') }}</small>
 				<p v-if="resource === 'vehicles'" class="records-total">{{ __("Number of Vehicles") }}: <b>{{ total }}</b></p>
 			</div>
 			<div class="page-actions">
@@ -372,7 +375,8 @@ async function customerPaymentCreated(result) {
 							</router-link>
 							<bdi v-else-if="resource === 'vehicles' && key === 'warranty'">{{ row.warranty?.expiry_date || "—" }}</bdi>
 							<span v-else-if="resource === 'import-files' && ['received_vehicles','sold_vehicles','remaining_vehicles'].includes(key)" :title="__(row._vehicle_issue || '')">{{ row[key] ?? "—" }}</span>
-							<div v-else-if="resource === 'import-files' && ['purchase_value','paid_amount','outstanding_amount'].includes(key)" class="purchase-values" :title="__(row._finance_issue || '')">
+							<div v-else-if="resource === 'import-files' && /^(purchase_value|paid_amount|outstanding_amount)_/.test(key)" class="purchase-values" :title="__(key.endsWith('_sar') ? row._sar_finance_issue || '' : row._invoice_finance_issue || '')">
+								<small v-if="key === 'purchase_value_invoice_currency' && row[key]?.length > 1">{{ __('Mixed Invoice Currencies') }}</small>
 								<bdi v-for="value in row[key] || []" :key="value.currency">{{ purchaseAmount(value) }}</bdi>
 								<span v-if="!row[key]?.length">{{ row[key] == null ? "—" : "0" }}</span>
 							</div>

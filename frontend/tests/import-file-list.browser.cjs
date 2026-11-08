@@ -54,15 +54,17 @@ frappe.destroy()`],{cwd:root+'/sites',encoding:'utf8'}));
    const table=page.locator('.page > .panel.table-wrap > table');
    await table.waitFor();
    assert.equal(await page.locator('html').getAttribute('dir'),lang==='ar'?'rtl':'ltr');
-   const headers=['Name','Supplier','Received Vehicles','Sold Vehicles','Remaining Vehicles','Purchase Value','Paid Amount','Outstanding Amount','Status','Country of Origin','Supplier Currency'].map(t);
+   const headers=['Name','Supplier','Received Vehicles','Sold Vehicles','Remaining Vehicles','Purchase Value (Invoice Currency)','Paid Amount (Invoice Currency)','Outstanding Amount (Invoice Currency)','Status','Country of Origin','Supplier Currency','Purchase Value (SAR)','Paid Amount (SAR)','Outstanding Amount (SAR)'].map(t);
    assert.deepEqual(await table.locator('thead th').allTextContents(),headers);
    assert.ok(data.rows.length&&data.total>2,'Existing dev imports are needed for the live pagination check');
    for(const [index,key] of ['received_vehicles','sold_vehicles','remaining_vehicles'].entries()){
     assert.equal((await table.locator('tbody tr').first().locator('td').nth(index+2).textContent()).trim(),String(data.rows[0][key]??'—'));
    }
    for(const row of data.rows)assert.equal(row.remaining_vehicles,row.received_vehicles-row.sold_vehicles);
-   const money=await table.locator('tbody tr').first().locator('td').nth(5).textContent();
-   for(const value of data.rows[0].purchase_value || [])assert.ok(money.includes(value.currency));
+   for(const [index,key] of [[5,'purchase_value_invoice_currency'],[6,'paid_amount_invoice_currency'],[7,'outstanding_amount_invoice_currency'],[11,'purchase_value_sar'],[12,'paid_amount_sar'],[13,'outstanding_amount_sar']]){
+    const money=await table.locator('tbody tr').first().locator('td').nth(index).textContent();
+    for(const value of data.rows[0][key] || [])assert.ok(money.includes(value.currency));
+   }
    const firstNames=data.rows.map(row=>row.name);
    loading=response();await page.getByRole('button',{name:t('Next'),exact:true}).click();
    data=(await (await loading).json()).message;
@@ -126,7 +128,7 @@ for filename,supplier in [(${JSON.stringify(validPath)},${JSON.stringify(session
    await dialog.locator('.dialog-actions').getByRole('button',{name:t('Close'),exact:true}).click();
   }
   assert.deepEqual(errors,[]);
-  console.log(JSON.stringify({arabicRTL:'passed',englishLTR:'passed',elevenColumns:'passed',liveCountsAndCurrencies:'passed',searchAndPagination:'passed',excelExportAndTemplate:'passed',excelValidationAndCreate:'passed',emptyState:'passed',mobileOverflow:'passed',pageErrors:errors}));
+  console.log(JSON.stringify({arabicRTL:'passed',englishLTR:'passed',fourteenColumns:'passed',liveCountsAndCurrencies:'passed',searchAndPagination:'passed',excelExportAndTemplate:'passed',excelValidationAndCreate:'passed',emptyState:'passed',mobileOverflow:'passed',pageErrors:errors}));
  }catch(error){await page.screenshot({path:'/tmp/import-file-list-failure.png'});throw error;}
  finally{
   try{python(`frappe.in_test=True

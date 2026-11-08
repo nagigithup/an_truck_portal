@@ -8,7 +8,7 @@ import frappe
 from frappe import _
 
 from an_truck_portal.access import require_read
-from an_truck_portal.import_file_metrics import COLUMNS
+from an_truck_portal.import_file_metrics import COLUMNS, MONEY_COLUMNS
 
 DT = "Vehicle Import File"
 FIELDS = {"import_title":"Name", "supplier":"Supplier", "country_of_origin":"Country of Origin",
@@ -81,7 +81,7 @@ def export(company=None,search=None,filters=None):
 			values = []
 			for field in COLUMNS:
 				value = row.get(field)
-				if field in {"purchase_value","paid_amount","outstanding_amount"}:
+				if field in MONEY_COLUMNS:
 					value = "\n".join(f"{entry['amount']} {entry['currency']}" for entry in value) if value is not None else "—"
 				elif field=="status" and value:
 					value = _label(value)

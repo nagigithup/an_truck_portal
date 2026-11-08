@@ -1014,5 +1014,17 @@
   "Sold Vehicles": "Sold Vehicles",
   "Remaining Vehicles": "Remaining Vehicles",
   "Vehicle receipt read permission is required.": "Vehicle receipt read permission is required.",
-  "Sales Invoice and Delivery Note read permissions are required.": "Sales Invoice and Delivery Note read permissions are required."
+  "Sales Invoice and Delivery Note read permissions are required.": "Sales Invoice and Delivery Note read permissions are required.",
+  "Purchase Value (Invoice Currency)": "Purchase Value (Invoice Currency)",
+  "Paid Amount (Invoice Currency)": "Paid Amount (Invoice Currency)",
+  "Outstanding Amount (Invoice Currency)": "Outstanding Amount (Invoice Currency)",
+  "Purchase Value (SAR)": "Purchase Value (SAR)",
+  "Paid Amount (SAR)": "Paid Amount (SAR)",
+  "Outstanding Amount (SAR)": "Outstanding Amount (SAR)",
+  "Mixed Invoice Currencies": "Mixed Invoice Currencies",
+  "Financial amounts use submitted purchase invoices and recorded allocations. Invoice currencies are shown separately; SAR equivalents use recorded accounting conversions.": "Financial amounts use submitted purchase invoices and recorded allocations. Invoice currencies are shown separately; SAR equivalents use recorded accounting conversions.",
+  "No submitted purchase invoices are linked.": "No submitted purchase invoices are linked.",
+  "Invoice currency is missing.": "Invoice currency is missing.",
+  "No recorded SAR conversion is available.": "No recorded SAR conversion is available.",
+  "The recorded invoice or account conversion is unavailable.": "The recorded invoice or account conversion is unavailable."
 }

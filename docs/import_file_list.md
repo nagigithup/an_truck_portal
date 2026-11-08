@@ -1,8 +1,10 @@
 # Vehicle Import File list and Excel
 
-The eleven columns, in logical order (right to left in Arabic), are Name, Supplier,
-Received Vehicles, Sold Vehicles, Remaining Vehicles, Purchase Value, Paid Amount,
-Outstanding Amount, Status, Country of Origin and Supplier Currency.
+The fourteen columns, in logical order (right to left in Arabic), are Name,
+Supplier, Received Vehicles, Sold Vehicles, Remaining Vehicles, Purchase Value
+(Invoice Currency), Paid Amount (Invoice Currency), Outstanding Amount (Invoice
+Currency), Status, Country of Origin, Supplier Currency, Purchase Value (SAR),
+Paid Amount (SAR) and Outstanding Amount (SAR).
 `import_title`, `company`, `contract_number` and
 `contract_date` are hidden from this list only. Their DocType fields, detail forms
 and existing data are unchanged. Existing search and `modified desc` ordering are
@@ -29,14 +31,15 @@ preserved; totals and Previous/Next pagination are permission-aware.
   The original `vehicle_count` API value remains available for backward
   compatibility but is no longer a displayed/exported column. No receipt or sales
   status recalculation helper is called, because those operational helpers write.
-- Purchase Value sums each readable non-cancelled Purchase Order parent once.
-  Draft and submitted orders are included, matching the existing import workspace.
-  The explicit `custom_vehicle_import_file` link is authoritative. For older orders
-  with no explicit link, actual Vehicle Master `purchase_order` links are reused.
-- All financial totals use **company currency**, shown in every amount cell.
-  Purchase values use stored `base_grand_total`; allocations use the standard
-  Payment Ledger Entry's company-currency `amount`. Today's exchange rates and the
-  import file's supplier-currency label are never used to add mixed currencies.
+- The displayed financial columns now use **submitted Purchase Invoices**, not
+  uninvoiced PO commitments. Purchase Value is net `grand_total` of normal invoices
+  and negative return invoices, including their actual taxes. Draft/cancelled
+  invoices are excluded. Files without a submitted invoice show `—` with a
+  translated explanation; neither USD nor the Supplier Currency label is assumed.
+- Primary totals are grouped by each actual invoice's `currency`. Mixed-currency
+  files show separate, consistently ordered lines for each currency in all three
+  primary cells, including zero allocations, and a Mixed Invoice Currencies label.
+  Different currencies are never added into one native-currency figure.
 - Submitted Purchase Invoices are located through their explicit import link or
   actual item `purchase_order` / `purchase_receipt` references. Return invoices
   also follow `return_against`. Cancelled invoices and delinked ledger entries are
@@ -46,19 +49,31 @@ preserved; totals and Previous/Next pagination are permission-aware.
   advances are excluded. Native advance allocation and Payment Reconciliation are
   reflected by reading the current active ledger, rather than stale header amounts.
   A shared payment contributes only its allocation against each relevant invoice.
-- Outstanding Amount starts with Purchase Value, subtracts normal invoice base
-  totals and adds the current ledger outstanding of those invoices and their
-  returns. Thus it retains the uninvoiced PO commitment and includes actual credit
-  notes, write-offs, FX and rounding adjustments. In the ordinary case it equals
-  Purchase Value minus allocated payments. Non-cash journal adjustments affect
-  outstanding, not Paid Amount. This is a PO commitment measure, **not** a replacement
-  for ERPNext's supplier Accounts Payable report. Credits may produce negative values.
+- For invoice-currency paid/outstanding values, use the ledger's
+  `amount_in_account_currency` directly when the payable account is in invoice
+  currency. For a company-currency payable account, divide by that invoice's
+  **stored** `conversion_rate`. Third-currency accounts or missing rates are
+  unavailable, not guessed. No payment is proportionally split across invoices.
+- Outstanding Amount is the current active payment-ledger balance, retaining
+  native credit, write-off, FX and rounding adjustments. Non-cash adjustments affect
+  outstanding, not Paid Amount. Consequently purchase minus paid may differ from
+  outstanding by legitimate accounting adjustments. Credits/refunds can be negative.
+- The SAR columns use stored `base_grand_total` and ledger `amount` when company
+  currency is SAR. For SAR invoices of a non-SAR company, actual SAR transaction /
+  converted account values are available. If neither the company nor invoice has
+  recorded SAR accounting values, the SAR columns show `—` with an explanation.
+  Missing conversion values are never replaced by a fixed or current exchange rate.
+- Backward-compatible API fields `purchase_value`, `paid_amount`, and
+  `outstanding_amount` retain the previous company-currency PO-commitment basis.
+  The UI/export explicitly use new `*_invoice_currency` and `*_sar` fields; no
+  existing number is merely relabeled as USD. Actual PO links remain useful for
+  resolving legacy invoice-item associations, with explicit import links authoritative.
 
 No pro-rata allocation is invented for a legacy shared PO/invoice. Ambiguous
 associations, missing company currency, unreadable accounting sources or incomplete
 invoice ledgers show `—` with a translated reason. Legacy sharing is checked across
 pages, so changing pagination cannot count a shared order twice. Readable empty
-sets show zero. Financial columns are intentionally unavailable to users lacking
+invoice groups show zero paid amounts. Financial columns are unavailable to users lacking
 relevant source read permissions.
 
 Queries are batched by the current page's import files, POs, receipts, invoices,
@@ -93,7 +108,7 @@ formula-like strings literally. Workbooks are processed in memory without saving
 uploaded files. Arabic and English template headers are accepted.
 
 Export Excel requires native DocType export permission. It exports **all filtered
-rows**, not just the visible page, in the same existing sort order and exact eleven
+rows**, not just the visible page, in the same existing sort order and exact fourteen
 displayed columns. Computed values reuse the list's calculation/permission path.
 Money cells include the currency code; unavailable values remain `—`. Headers and
 statuses follow the selected language, Unicode is preserved, and Arabic worksheets
@@ -106,14 +121,14 @@ truncating results.
 - `an_truck_portal/import_file_metrics.py`: batched permission-aware totals.
 - `an_truck_portal/api/import_file_excel.py`: template, validation/import and export.
 - `an_truck_portal/api/context.py`: expose the existing native export capability.
-- `frontend/src/views/Records.vue`: eleven columns, amount formatting and Excel actions.
+- `frontend/src/views/Records.vue`: fourteen columns, currency groups and Excel actions.
 - `frontend/src/components/ImportFileExcelDialog.vue`: template/upload/row feedback.
 - `frontend/src/api.js`: authenticated file downloads with existing error handling.
 - `frontend/src/locales/{ar,en}.json`, `an_truck_portal/translations/ar.csv`.
 - `an_truck_portal/tests/test_import_file_list.py` and
   `frontend/tests/import-file-list.browser.cjs`.
 - This document and generated `an_truck_portal/public/frontend/manifest.json`,
-  `an-truck-portal-DOYlUhpw.js`, `an-truck-portal-CLauoIMj.css` (replace old hashes).
+  `an-truck-portal-CF0t_jNo.js`, `an-truck-portal-C7K7iwN4.css` (replace old hashes).
 
 ## Focused verification on dev.localhost
 
@@ -123,10 +138,11 @@ cd apps/an_truck_portal/frontend
 npm run build
 ```
 
-Seventeen integration tests pass. They cover receipt-backed VIN sets, completed
+Nineteen integration tests pass. They cover receipt-backed VIN sets, completed
 sales, partial-invoice returns, delivery returns, later resales, restricted source
 permissions, deduplication, more than 20
-orders, currencies, actual submitted invoice/payment allocations, shared payments,
+orders, actual submitted invoice/payment allocations in SAR and USD payable accounts,
+mixed EUR/SAR/USD invoices using distinct recorded rates (5.7 and 4.2), shared payments,
 returns/cancellations, advances, late native reconciliation, cash journals versus
 non-cash adjustments, legacy item links/shared references across pages, permissions,
 pagination, batching, workbook labels/Unicode/filtering, duplicates, invalid rows
@@ -139,7 +155,7 @@ PORTAL_PLAYWRIGHT_PATH=/tmp/an-truck-browser-check/node_modules/playwright \
   node apps/an_truck_portal/frontend/tests/import-file-list.browser.cjs
 ```
 
-The live browser check verifies Arabic RTL, English LTR, all eleven headers, real
+The live browser check verifies Arabic RTL, English LTR, all fourteen headers, real
 counts/currencies, search, pagination, empty results, mobile layout, actual Excel
 downloads, row validation and successful creation. It creates/deletes only uniquely
 marked new import-file master fixtures and logs out its own session. It creates no
@@ -149,5 +165,10 @@ Frontend production build, Python compilation and `git diff --check` also pass.
 
 No schema change, migration, dependency installation, permission change or service
 restart is required. Frontend assets are rebuilt. Deploy source and generated assets
-together. No historical/financial records were changed, and no commit or push was
-performed.
+together. No historical/financial records were changed. The user's latest request
+authorizes committing and pushing this currency-view update to `version-16`.
+
+At verification time all four existing submitted local Purchase Invoices were in
+SAR. These existing documents correctly remain labeled SAR in the primary view;
+USD and mixed-currency behavior was verified using rollback-only integration
+fixtures, with no changes to existing invoices or exchange-rate configuration.
