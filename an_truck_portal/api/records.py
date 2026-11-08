@@ -19,6 +19,7 @@ ALLOWED = {
 		"contract_number",
 		"contract_date",
 		"supplier_currency",
+		"company_currency",
 		"total_contract_amount",
 		"expected_arrival_date",
 		"port_of_destination",
@@ -157,6 +158,11 @@ ALLOWED = {
 }
 
 
+def _import_file_totals(rows):
+	from an_truck_portal.import_file_metrics import enrich
+	enrich(rows)
+
+
 @frappe.whitelist()
 def list_records(
 	doctype, search=None, company=None, page=1, page_length=20, filters=None, column_filters=None
@@ -218,6 +224,10 @@ def list_records(
 		resolve_vehicle_rows(rows)
 	total = len(rows)
 	filter_options = {}
+	if doctype == "Vehicle Import File":
+		_import_file_totals(rows)
+		total = frappe.get_list(doctype, filters=fs, or_filters=or_filters,
+			fields=[{"COUNT": "name", "as": "count"}], order_by="", page_length=1)[0].count
 	if doctype == "Vehicle Master":
 		total = len(
 			frappe.get_list(

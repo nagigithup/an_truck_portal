@@ -63,6 +63,18 @@ export async function call(method, args = {}, write = false) {
 	return readResponse(response);
 }
 
+export async function downloadFile(method, args = {}, filename = "export.xlsx") {
+	const url = new URL(`/api/method/${method}`, location.origin);
+	for (const [key, value] of Object.entries(args)) if (value !== "" && value != null) url.searchParams.set(key, typeof value === "object" ? JSON.stringify(value) : value);
+	url.searchParams.set("_lang", language.value);
+	const response = await fetch(url, { credentials: "same-origin" });
+	if (!response.ok) await readResponse(response);
+	const objectUrl = URL.createObjectURL(await response.blob());
+	const link = document.createElement("a");
+	link.href = objectUrl; link.download = filename; link.click();
+	setTimeout(() => URL.revokeObjectURL(objectUrl), 1000);
+}
+
 export async function uploadFile(file, doctype, docname, options = {}) {
 	const url = new URL(`/api/method/${options.method || "upload_file"}`, location.origin);
 	url.searchParams.set("_lang", language.value);

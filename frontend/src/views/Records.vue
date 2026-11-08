@@ -1,7 +1,8 @@
 <script setup>
 import { computed, inject, onMounted, ref, watch } from "vue";
 import { useRouter } from "vue-router";
-import { call, __ } from "../api";
+import { call, downloadFile, __ } from "../api";
+import { language } from "../i18n";
 import CreateImportFileDialog from "../components/CreateImportFileDialog.vue";
 import PurchaseOrderDialog from "../components/PurchaseOrderDialog.vue";
 import PurchaseInvoiceDialog from "../components/PurchaseInvoiceDialog.vue";
@@ -10,11 +11,13 @@ import SalesDocumentDialog from "../components/SalesDocumentDialog.vue";
 import SupplierPaymentDialog from "../components/SupplierPaymentDialog.vue";
 import FilterBar from "../components/FilterBar.vue";
 import FormField from "../components/FormField.vue";
+import ImportFileExcelDialog from "../components/ImportFileExcelDialog.vue";
 
 const props = defineProps({ resource: String });
 const { ctx } = inject("portal");
 const router = useRouter();
 const importDialog = ref(null);
+const excelDialog=ref(null),exporting=ref(false),excelError=ref("");
 const purchaseOrderDialog = ref(null);
 const purchaseInvoiceDialog = ref(null);
 const vehicleDrawer = ref(null);
@@ -177,7 +180,22 @@ const hiddenVehicleColumns = new Set([
 	"model",
 ]);
 
+const importFileColumns = {
+	name: "Name",
+	supplier: "Supplier",
+	received_vehicles: "Received Vehicles",
+	sold_vehicles: "Sold Vehicles",
+	remaining_vehicles: "Remaining Vehicles",
+	purchase_value: "Purchase Value",
+	paid_amount: "Paid Amount",
+	outstanding_amount: "Outstanding Amount",
+	status: "Status",
+	country_of_origin: "Country of Origin",
+	supplier_currency: "Supplier Currency",
+};
+
 function vehicleColumns(row = {}) {
+	if (props.resource === "import-files") return Object.keys(importFileColumns);
 	if (props.resource === "vehicles" && !Object.keys(row).length) {
 		return ["chassis_number", "item_name", "vehicle_status"];
 	}
@@ -189,6 +207,7 @@ function vehicleColumns(row = {}) {
 }
 
 function columnLabel(key) {
+	if (props.resource === "import-files") return __(importFileColumns[key]);
 	return __(
 		{
 			vehicle_import_file: "Vehicle Import File Number",
@@ -198,6 +217,23 @@ function columnLabel(key) {
 			warranty: "Warranty Expiry Date",
 		}[key] || key.replaceAll("_", " "),
 	);
+}
+
+function purchaseAmount(value) {
+	try {
+		return new Intl.NumberFormat(language.value, {
+			style: "currency", currency: value.currency, currencyDisplay: "code",
+		}).format(value.amount);
+	} catch {
+		return `${new Intl.NumberFormat(language.value).format(value.amount)} ${value.currency || ""}`.trim();
+	}
+}
+
+async function exportExcel(){
+	if(exporting.value)return;
+	exporting.value=true;excelError.value='';
+	try{await downloadFile('an_truck_portal.api.import_file_excel.export',{company:ctx.company,search:search.value},'import-files.xlsx');}
+	catch(e){excelError.value=e.message;}finally{exporting.value=false;}
 }
 
 function openVehicle(vehicle, edit = false) {
@@ -232,9 +268,12 @@ async function customerPaymentCreated(result) {
 			<div>
 				<p class="eyebrow">{{ __("Records") }}</p>
 				<h1>{{ __(doctype) }}</h1>
+				<small v-if="resource === 'import-files'">{{ __('Financial amounts use company currency and recorded exchange rates. Outstanding includes credits and accounting adjustments.') }}</small>
 				<p v-if="resource === 'vehicles'" class="records-total">{{ __("Number of Vehicles") }}: <b>{{ total }}</b></p>
 			</div>
 			<div class="page-actions">
+				<button v-if="resource==='import-files' && ctx.permissions['Vehicle Import File']?.create" type="button" class="button secondary" @click="excelDialog.open()">{{ __('Import Excel') }}</button>
+				<button v-if="resource==='import-files' && ctx.permissions['Vehicle Import File']?.export" type="button" class="button secondary" :disabled="exporting" @click="exportExcel">{{ __('Export Excel') }}</button>
 				<button
 					v-if="
 						resource === 'import-files' &&
@@ -281,6 +320,7 @@ async function customerPaymentCreated(result) {
 				<input v-model="search" class="filter" :placeholder="__('Search…')" />
 			</div>
 		</div>
+		<p v-if="excelError" class="notice error-notice">{{ excelError }}</p>
 		<FilterBar v-if="resource === 'vehicles'" class="panel vehicle-filters">
 			<FormField v-model="chassisFilter" :label="__('Chassis Number')" ltr />
 			<FormField v-model="itemNameFilter" :label="__('Item Name')" />
@@ -295,7 +335,7 @@ async function customerPaymentCreated(result) {
 		<div class="panel table-wrap">
 			<div v-if="state === 'loading'" class="empty">{{ __("Loading…") }}</div>
 			<div v-else-if="state === 'error'" class="empty error">{{ rows[0]?.error }}</div>
-			<div v-else-if="!rows.length && resource !== 'vehicles'" class="empty">{{ __("No records found") }}</div>
+			<div v-else-if="!rows.length && !['vehicles', 'import-files'].includes(resource)" class="empty">{{ __("No records found") }}</div>
 			<table v-else>
 				<thead>
 					<tr>
@@ -307,7 +347,7 @@ async function customerPaymentCreated(result) {
 					</tr>
 				</thead>
 				<tbody>
-					<tr v-if="resource === 'vehicles' && !rows.length"><td :colspan="vehicleColumns({}).length + 2" class="empty">{{ __("No records found") }}</td></tr>
+					<tr v-if="['vehicles', 'import-files'].includes(resource) && !rows.length"><td :colspan="vehicleColumns({}).length + (resource === 'vehicles' ? 2 : 0)" class="empty">{{ __("No records found") }}</td></tr>
 					<tr v-for="(row, index) in rows" :key="row.name" @click="resource === 'vehicles' ? undefined : open(row)">
 						<td v-if="resource === 'vehicles'" class="record-number">{{ (page - 1) * pageLength + index + 1 }}</td>
 						<td
@@ -331,6 +371,11 @@ async function customerPaymentCreated(result) {
 								<bdi>{{ row[key] }}</bdi>
 							</router-link>
 							<bdi v-else-if="resource === 'vehicles' && key === 'warranty'">{{ row.warranty?.expiry_date || "—" }}</bdi>
+							<span v-else-if="resource === 'import-files' && ['received_vehicles','sold_vehicles','remaining_vehicles'].includes(key)" :title="__(row._vehicle_issue || '')">{{ row[key] ?? "—" }}</span>
+							<div v-else-if="resource === 'import-files' && ['purchase_value','paid_amount','outstanding_amount'].includes(key)" class="purchase-values" :title="__(row._finance_issue || '')">
+								<bdi v-for="value in row[key] || []" :key="value.currency">{{ purchaseAmount(value) }}</bdi>
+								<span v-if="!row[key]?.length">{{ row[key] == null ? "—" : "0" }}</span>
+							</div>
 							<span v-else-if="key === 'status' || key === 'vehicle_status'" class="badge">
 								{{ __(row[key]) }}
 							</span>
@@ -344,11 +389,12 @@ async function customerPaymentCreated(result) {
 				</tbody>
 			</table>
 		</div>
-		<div v-if="resource === 'vehicles' && state === 'ready' && total" class="pagination">
-			<span>{{ __("Page") }} {{ page }} / {{ totalPages }} · {{ __("Number of Vehicles") }}: {{ total }}</span>
+		<div v-if="['vehicles', 'import-files'].includes(resource) && state === 'ready' && total" class="pagination">
+			<span>{{ __("Page") }} {{ page }} / {{ totalPages }}<template v-if="resource === 'vehicles'"> · {{ __("Number of Vehicles") }}: {{ total }}</template></span>
 			<div class="row-actions"><button class="button secondary" :disabled="page === 1" @click="page--; load()">{{ __("Previous") }}</button><button class="button secondary" :disabled="page >= totalPages" @click="page++; load()">{{ __("Next") }}</button></div>
 		</div>
 		<CreateImportFileDialog v-if="resource === 'import-files'" ref="importDialog" />
+		<ImportFileExcelDialog v-if="resource === 'import-files'" ref="excelDialog" @imported="load" />
 		<PurchaseOrderDialog
 			v-if="resource === 'purchase-orders'"
 			ref="purchaseOrderDialog"
@@ -376,4 +422,6 @@ async function customerPaymentCreated(result) {
 
 <style scoped>
 .vehicle-filters { margin-bottom: 16px; }
+.purchase-values { display: flex; flex-direction: column; gap: 3px; }
+.purchase-values bdi { white-space: nowrap; }
 </style>
