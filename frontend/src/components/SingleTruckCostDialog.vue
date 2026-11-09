@@ -65,7 +65,9 @@ defineExpose({open});
     <p v-if="target && !target.eligible" class="form-error" role="alert">{{ __(target.reason) }}</p>
     <div v-if="review || target" class="target-summary">
      <h3>{{ __(review ? 'Confirm Single-Truck Cost' : 'Target Vehicle') }}</h3>
+     <p v-if="(review?.summary || target).doctype === 'Stock Reconciliation'">{{ __('Stock Reconciliation revalues this on-hand VIN without changing the net stock quantity.') }}</p>
      <dl>
+      <dt>{{ __('Document Type') }}</dt><dd>{{ __((review?.summary || target).doctype) }}</dd>
       <dt>{{ __('VIN / Chassis Number') }}</dt><dd><bdi>{{ (review?.summary || target).vin }}</bdi></dd>
       <dt>{{ __('Vehicle Import File') }}</dt><dd><bdi>{{ importFile }}</bdi></dd>
       <dt>{{ __('Target Vehicle') }}</dt><dd><bdi>{{ (review?.summary || target).vehicle }} · {{ (review?.summary || target).item_name }}</bdi></dd>
@@ -74,6 +76,10 @@ defineExpose({open});
       <dt>{{ __('Purchase Receipt') }}</dt><dd><bdi>{{ (review?.summary || target).purchase_receipt }}</bdi></dd>
       <dt>{{ __('Receipt Currency') }}</dt><dd><bdi>{{ (review?.summary || target).receipt_currency }}</bdi></dd>
       <template v-if="review">
+       <template v-if="review.summary.doctype === 'Stock Reconciliation'">
+        <dt>{{ __('Current Serial Valuation') }}</dt><dd><bdi>{{ review.summary.current_valuation }} {{ review.summary.company_currency }}</bdi></dd>
+        <dt>{{ __('New Serial Valuation') }}</dt><dd><bdi>{{ review.summary.new_valuation }} {{ review.summary.company_currency }}</bdi></dd>
+       </template>
        <dt>{{ __('Cost Amount') }}</dt><dd><bdi>{{ review.summary.amount }} {{ review.summary.currency }}</bdi></dd>
        <dt>{{ __('Amount (Company Currency)') }}</dt><dd><bdi>{{ review.summary.company_amount }} {{ review.summary.company_currency }}</bdi></dd>
        <dt>{{ __('Exchange Rate') }}</dt><dd><bdi>{{ review.summary.exchange_rate }}</bdi></dd>

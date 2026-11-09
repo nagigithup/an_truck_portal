@@ -47,6 +47,7 @@ const detailFields = computed(() => [
 	{ label: __("Supplier"), value: fieldValues.value.supplier, fieldname: "supplier" },
 	{ label: __("Purchase Cost"), value: fieldValues.value.purchase_valuation_rate, fieldname: "purchase_valuation_rate" },
 	{ label: __("Landed Cost Added"), value: fieldValues.value.landed_cost_added, fieldname: "landed_cost_added" },
+	...(Number(fieldValues.value.custom_portal_serial_cost_adjustment) ? [{ label: __("Serial Valuation Adjustment"), value: fieldValues.value.custom_portal_serial_cost_adjustment, fieldname: "custom_portal_serial_cost_adjustment" }] : []),
 	{ label: __("Landed Cost"), value: fieldValues.value.final_valuation_rate, fieldname: "final_valuation_rate" },
 	{ label: __("Purchase Receipt"), value: fieldValues.value.purchase_receipt, fieldname: "purchase_receipt", ltr: true },
 	{ label: __("Import File"), value: fieldValues.value.vehicle_import_file, fieldname: "vehicle_import_file", ltr: true },
@@ -82,7 +83,7 @@ function formatValue(value, fieldname) {
 	if (["inspection_status", "warranty", "sales_status", "vehicle_status"].includes(fieldname)) {
 		return __(value);
 	}
-	if (["purchase_valuation_rate", "landed_cost_added", "final_valuation_rate"].includes(fieldname)) {
+	if (["purchase_valuation_rate", "landed_cost_added", "custom_portal_serial_cost_adjustment", "final_valuation_rate"].includes(fieldname)) {
 		try {
 			return new Intl.NumberFormat(document.documentElement.lang, {
 				style: "currency",

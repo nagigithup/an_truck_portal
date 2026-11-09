@@ -1,155 +1,138 @@
-# Add Cost to One Truck
+# Add Cost to One Truck — native serial revaluation
 
-The import workspace now offers **Add Cost to One Truck / إضافة تكلفة لشاحنة واحدة**
-beside its existing bulk cost buttons. Existing bulk buttons, dialog, API, account
-options and allocation behavior are unchanged.
+Verified on `dev.localhost`, 2026-11-09, Frappe 16.54.0 / ERPNext 16.53.0.
+The user explicitly approved Stock Reconciliation for unsold, on-hand VINs after
+reviewing its native -1/+1 valuation legs and zero net quantity change.
 
-## ERPNext v16 allocation audit
+## Document choice and scope
 
-The installed `LandedCostVoucher.get_items_from_purchase_receipts()` loads whole
-receipt items. `StockController.set_landed_cost_voucher_amount()` accumulates
-submitted charges by `purchase_receipt_item`. Native receipt valuation then
-revalues that item's stock quantity and serials. A Landed Cost Item has no native
-selector for allocating to an individual VIN inside a multi-unit receipt row.
-Changing the LCV quantity to 1 does not isolate one VIN in a quantity-2 receipt row.
+The existing popup, inputs and bulk landed-cost workflow are retained.
 
-Accordingly this feature supports only an original **one-unit stock receipt row
-containing exactly the selected VIN**. It checks:
+- An original one-unit receipt item containing exactly the selected VIN continues
+  using a standard **Landed Cost Voucher / Distribute Manually**. Its native
+  account currency, exchange rate and allocation behavior are unchanged.
+- A multi-unit receipt item uses a separately identified standard **Stock
+  Reconciliation**, selecting only the target VIN. It never presents receipt-row
+  allocation as VIN allocation. Confirmation names the actual document type and
+  shows current/new serial valuation, VIN, original receipt, import file,
+  warehouse, account, amount and currency.
+- Native LCV allocation remains prohibited for a marked single-truck voucher
+  against a shared receipt row, including attempts through Desk or API.
 
-- The Vehicle Master belongs to the current import file and company, is enabled,
-  and has actual Purchase Receipt / Purchase Receipt Item references.
-- The receipt is submitted, not a return, and has the same company and explicit
-  import-file link. The original row's item matches the vehicle's item.
-- Receipt `qty` and `stock_qty` are both exactly 1, accepted/received quantity is
-  one, rejected quantity is zero, and the serialized stock item is not a fixed asset.
-- Native serial / Serial and Batch Bundle extraction yields exactly one serial,
-  matching the VIN. Leading zeros and VIN spelling are never changed.
+[Native allocation audit and experimental results](single_truck_cost_serial_allocation_audit.md).
 
-Multiple units, multiple VINs, UOM conversions producing multiple stock units,
-rejected quantities, missing serial proof or inconsistent links are blocked. The
-popup displays an explanation and disables Review Cost. Both the final API and
-the targeted-voucher Desk validation enforce the same invariant. There is no
-automatic splitting, amendment or restructuring of historical receipts. Future
-one-truck costing requires an eligible original receipt row; bulk costing remains
-available for multi-truck rows.
+The selected-serial route requires native Serial No Wise Valuation, an active
+submitted original receipt, matching Vehicle Master / receipt item / import file /
+company, and the actual VIN still on hand in a readable company warehouse.
+The current warehouse is obtained from native serial records, rather than assumed
+from the historical receipt. Native serial availability and incoming-rate APIs
+verify that VIN at posting time. Sold/delivered trucks, active invoice/delivery
+serial history and unsupported or untracked valuation differences are blocked.
+Returned sale history is conservatively blocked for finance review as well.
+The existing one-unit LCV route retains its normal ERPNext reposting behavior.
 
-## Popup and native accounting
+## Native accounting and cost integration
 
-The popup reuses `FormField`, native dialog styling and existing company expense
-account options. VIN search is server-side, permission-aware, limited to the current
-import file and bounded to 30 suggestions. Typing a foreign VIN cannot bypass scope.
-Selecting a truck loads its identity, source receipt, warehouse and currencies.
+Stock Reconciliation uses `purpose = Stock Reconciliation`, one native incoming
+serial bundle, `reconcile_all_serial_batch = 0`, and `qty = current_qty = 1`.
+The native controller generates the matching selected-serial outgoing bundle and
+its own stock/GL entries. There is no Stock Entry, receipt splitting/amendment,
+manual stock/GL edit or second accounting ledger. Net quantity stays unchanged.
+The final native value difference must match the reviewed additional cost.
 
-The entered amount is in the **selected expense account's currency**. The native
-LCV controller supplies the account currency, exchange rate, company amount and
-normal account/dimension validations. No SAR/USD rate is hardcoded. Description
-is optional; the tax/charge row always includes the exact VIN for audit/history.
+This route requires an enabled expense leaf account **in company currency**.
+It uses the existing company expense-account options and native expense-account,
+cost-center, dimension, period, freeze, serial and stock validation. It does not
+invent an exchange rate or a foreign-currency Stock Reconciliation feature.
+Foreign-currency expenses need finance's normal currency/accounting process;
+original one-unit LCV currency support is preserved.
 
-Review Cost is read-only. It builds an unsaved standard LCV and returns the actual
-native calculation and a confirmation fingerprint. The review shows VIN, target
-vehicle, import file, company, source warehouse, receipt, receipt currency, entered
-amount/currency, company amount, exchange rate, expense account and description.
-Final submission recalculates server-side and rejects changed confirmation data.
+Vehicle Master retains its purchase and LCV breakdown. The additive read-only
+`custom_portal_serial_cost_adjustment` and final valuation derive from the native
+original receipt valuation plus submitted, explicitly linked Stock Reconciliation
+`difference_amount` values. Submitted/cancelled tagged documents provide the
+audit scope; no old vehicles are backfilled. Only the selected vehicle is refreshed
+by its posting/cancellation/repost hook. Other vehicle identities and costs are
+untouched, except normal existing bulk costs when deliberately posted.
 
-The resulting standard LCV has exactly one original receipt item and one cost row,
-uses **Distribute Manually**, and assigns 100% of its native company-currency
-`total_taxes_and_charges` to that item's `applicable_charges`. Normal `insert()` /
-`submit()` apply Frappe permissions, workflows and ERPNext validation. It does not
-post custom GL, update valuations manually or add a second inventory ledger.
+Native reconciliation stores an absolute valuation, not a permanent incremental
+charge. If a later bulk LCV changes the original receipt, ERPNext may recalculate
+the reconciliation's posted difference. History and Vehicle Master use this actual
+native difference, while the original requested amount remains available for audit.
+For example, receipt 1,000 -> target 6,000 initially posts 5,000; a subsequent
+100-per-truck bulk charge makes the posted reconciliation difference 4,900 and
+keeps that VIN at 6,000. This native behavior is tested and is not overridden.
 
-Authorized submission necessarily invokes ERPNext's usual receipt valuation,
-serial valuation, stock/GL reposting and future-reposting behavior. No existing
-receipt is manually edited or split. Implementation/testing did not submit an LCV
-against historical site data. There is no backfill or data correction migration.
+Cancellation uses native ERPNext validation and reversals. Multiple targeted
+adjustments for one VIN must be cancelled newest first. It restores the derived
+Vehicle Master value and removes cancelled amounts from active cost totals.
+A later genuine sale uses the actual revalued serial cost in native COGS.
 
-The existing AN Truck cost-change hook now limits Vehicle Master refreshes to the
-targeted vehicle **only when the new target field is populated**. Bulk vouchers
-continue refreshing their existing full receipt scope. Other vehicles' master
-records are not resaved by a single-truck cost. ERPNext may refresh valuation
-metadata on a receipt's other serials during its native repost; their allocated
-additional cost remains zero.
+## Permissions, history, retries and atomicity
 
-The existing `custom_vehicle_import_file` link makes the new voucher appear in
-the current import-file documents and cost history, including its VIN description.
-The new read-only vehicle link additionally provides direct audit navigation.
+Portal access, readable mutable import file and Company, and native
+read/create/submit permission for the selected document type are required.
+Vehicle, Item, Serial No, receipt, warehouse and account reads respect existing
+permissions and Company User Permissions. Nothing grants or bypasses user rights.
+An internal stock-posting hook refreshes only the linked derived vehicle summary,
+using the same trusted-summary pattern as the existing landed-cost hook.
 
-## Permissions, retries and atomicity
+The popup retains its confirmation fingerprint and stable retry key. Creation
+locks the import file, vehicle, original receipt and selected Serial No; repeats
+look up the request across both native document types. A unique persisted key
+and normalized payload prevent retries from creating a second voucher. A new
+request key permits another legitimate additional cost for the same VIN.
+Stale stock/rate/source data requires renewed confirmation. Cancelled requests
+are not silently recreated. Preview creates no document or serial bundle.
+All native bundle creation, insert, submit and derived cost updates share a
+savepoint and roll back together on failure, including failures after stock posting.
 
-The API requires portal access, a readable mutable import file and Company, and
-native LCV read/create/submit permissions. Vehicle, receipt, item, warehouse and
-account document read permissions are also checked. Company User Permissions stay
-in force. Completed/cancelled files and invalid source documents cannot be used.
+The current import-file cost history, totals, activity and linked-document view
+include tagged Stock Reconciliations with their actual type, native amount and
+VIN/notes. The portal has a read-only detail route `/serial-revaluations/:name`
+showing the original receipt, requested amount, posted change and valuation.
+Arabic/English and RTL/LTR use existing translation files. Mobile confirmation
+scrolls internally and retains visible footer actions.
 
-Local normal-user verification also encountered an existing installed
-`medatronics.security.ledger_company_permission` hook denying Company read to the
-new stock test user. This feature preserves that denial. The positive normal-user
-test used a native explicit Company read share for its new test user, then rolled
-the share back. No live permission grants or Medatronics files were changed.
-Deployment users must already have readable company/source/account records; this
-feature does not correct unrelated global permission-hook configuration.
+## Additive setup
 
-Every popup opening has a request key, preserved for retries/double clicks. The
-server stores a durable unique hash bound to the import file, user and key, plus
-the normalized payload hash. It locks the import-file row and performs locking
-reads for an existing request. A matching submitted request returns its existing
-LCV; different data with the same key is rejected. Cancelled requests are not silently
-recreated. A new key permits a legitimate separate cost for the same VIN.
+Both apps must be deployed together. The version-controlled install/after-migrate
+setup adds eight read-only audit fields on Stock Reconciliation: vehicle, import
+file, original receipt, original receipt item, requested amount, description,
+unique request hash and payload hash. It adds the read-only derived adjustment
+field on Vehicle Master. Existing single-truck LCV fields are retained.
+No accounts, warehouses, Items, balances or financial transactions are created.
 
-The unique database field provides an additional duplicate guard. There is no
-one-hour cache expiry. Creating/submitting runs in the request transaction with a
-savepoint: even a native failure after valuation changes rolls back the voucher
-and those changes. The popup disables input during submission and offers the same
-request on a network error. Closing/reopening intentionally starts a separate
-request; verify the existing history before starting another cost after abandoning
-an uncertain request.
-
-True simultaneous committed posting was not run on this development site's live
-stock. Sequential retries and native failure/retry paths were exercised; database
-row locks and the unique request field implement the concurrency protection.
-
-## Additive setup and deployment
-
-`an_truck_portal.setup.ensure_single_truck_cost_fields` creates only these LCV
-Custom Fields, leaving old voucher values empty:
-
-| Field | Purpose |
-| --- | --- |
-| `custom_portal_truck_cost_vehicle` | Read-only Vehicle Master Link, hidden when empty, not copied |
-| `custom_portal_truck_cost_request` | Hidden unique request hash, not copied |
-| `custom_portal_truck_cost_payload` | Hidden normalized payload hash, not copied |
-
-The version-controlled setup is called on install and after migrate. Deploy both
-the small `an_truck` service-hook change and `an_truck_portal` changes together.
-Local setup was applied without a full migration using:
+Targeted commands, already applied locally:
 
 ```sh
 bench --site dev.localhost execute an_truck_portal.setup.ensure_single_truck_cost_fields
+bench --site dev.localhost execute an_truck_portal.setup.ensure_serial_revaluation_fields
 ```
 
-Normal cloud migration also installs these fields. Alternatively run that targeted
-command with the intended site after updating both apps. No account, warehouse,
-Item, opening balance or financial transaction setup is created. The committed
-frontend manifest/assets are rebuilt; deploy them with the source.
+Normal future app migration also calls these installers. No full migration or
+bench restart was used for this change. Normal frontend assets are included.
 
-## Changed files
+## Modified source files
 
-In `an_truck`:
+`an_truck`:
 
-- `an_truck/services.py`: limit targeted-voucher VM refresh to its actual vehicle;
-  keep the bulk branch unchanged.
+- `an_truck/serial_vehicle_cost.py`: native-document-derived valuation and hooks.
+- `an_truck/an_truck/doctype/vehicle_master/vehicle_master.py`: derived cost read.
+- `an_truck/transactions.py`: existing history, totals, permissions and documents.
 
-In `an_truck_portal`:
+`an_truck_portal`:
 
-- `an_truck_portal/single_truck_cost.py`: eligibility, preview, native creation,
-  durable deduplication and targeted-voucher validation.
-- `an_truck_portal/api/import_file.py`: small permission-checked API adapters.
-- `an_truck_portal/setup.py`, `an_truck_portal/hooks.py`: additive fields and guard.
-- `frontend/src/components/SingleTruckCostDialog.vue` and
-  `frontend/src/views/ImportWorkspace.vue`: independent popup and adjacent buttons.
+- `an_truck_portal/single_truck_cost.py`, `api/import_file.py`: native route,
+  serial proof, scope, preview, creation, audit guards and read-only detail API.
+- `an_truck_portal/setup.py`, `hooks.py`: additive fields and document events.
+- `frontend/src/components/SingleTruckCostDialog.vue`, `VehicleDrawer.vue`:
+  document/valuation confirmation and cost breakdown.
+- `frontend/src/views/ImportWorkspace.vue`, `SerialRevaluationDetail.vue`,
+  `frontend/src/router.js`: history integration, actual document navigation.
 - `frontend/src/locales/{ar,en}.json`, `an_truck_portal/translations/ar.csv`.
-- `an_truck_portal/tests/test_single_truck_cost.py`,
-  `frontend/tests/single-truck-cost.browser.cjs`, this document, and generated
-  `an_truck_portal/public/frontend/manifest.json` plus the referenced JS/CSS assets.
+- Focused backend/browser tests, these two documents, frontend manifest and
+  its generated JS/CSS assets.
 
 ## Focused verification
 
@@ -159,24 +142,42 @@ cd apps/an_truck_portal/frontend
 npm run build
 ```
 
-Eight rollback-based integration tests exercise real new receipt/LCV submission
-and cancellation, exact per-VIN allocation, unchanged other vehicle masters,
-existing history links, shared-row and forged-quantity blocking, durable retry,
-separate additional costs, native rollback after a post-valuation failure, account
-currency conversion, confirmation changes, import/company scope, restricted users,
-a normal Stock Manager submission, and unchanged bulk allocation. Before/after
-fingerprints verify existing receipt/vehicle/stock/accounting documents are unchanged.
+Seventeen rollback-only integration tests pass, including:
+
+- Ten VINs in one original receipt item, 1,000 each, adding 5,000 to one: native
+  rates are **6,000 / 1,000 x 9**, Bin quantity 10 / value 15,000, native balanced
+  GL 5,000, and matching Vehicle Master cost. Original PR and other nine complete
+  Vehicle Master documents remain identical.
+- Native LCV experiment proving the same cost is shared 500 per VIN; forged
+  row-level VIN allocation remains blocked; ordinary bulk workflow unchanged.
+- History/detail, sequential duplicate retry, independent second cost,
+  newest-first cancellation, audit links, stale confirmation and rollback after
+  native submission failure, without orphan bundles or partial cost changes.
+- Real subsequent sale posts COGS 6,000; sold-VIN revaluation is rejected.
+- Later native bulk LCV/reposting preserves master/serial/GL consistency.
+- Native foreign-currency one-unit LCV, company-currency-only serial adjustment,
+  pooled-valuation denial, restricted users and normal Stock Manager submission
+  of both document types within its allowed company.
 
 ```sh
 PORTAL_PLAYWRIGHT_PATH=/tmp/an-truck-browser-check/node_modules/playwright \
   node apps/an_truck_portal/frontend/tests/single-truck-cost.browser.cjs
 ```
 
-The live browser check verifies Arabic/English, RTL/LTR, mobile scrolling and visible
-footer, existing bulk dialog, live native previews, foreign VIN denial, the
-translated multi-unit explanation, identical request keys on retry and renewed
-review after stale confirmation. Create
-requests are intercepted/aborted, so it posts **no** voucher against existing data.
-It fingerprints business documents before/after and creates/logs out only its own
-session. Screenshots: `/tmp/single-truck-cost-{ar,en}*.png`. Python compilation,
-frontend build and both repositories' `git diff --check` pass.
+Live browser verification passes Arabic RTL, English LTR, mobile bounds/scrolling,
+existing bulk popup, both native previews, foreign-VIN denial, stable retry key,
+stale-confirmation recovery and no console page errors. Submit requests are
+intercepted so no existing vehicle receives a cost. Business-record fingerprints
+before/after browser and every backend test confirm existing data is unchanged.
+The new read-only detail page is also checked in both languages and on mobile
+with a fixture API response; its native document data is tested by the backend.
+Screenshots: `/tmp/single-truck-cost-{ar,en}-shared-row{,-mobile}.png`.
+
+True simultaneous committed posting and queued background-worker execution were
+not run against this development site's existing stock; database locks, unique
+request fields, sequential retry and native repost behavior were verified.
+The installed unrelated Medatronics Company permission hook can restrict normal
+Company reads. Tests preserve that denial and use a rolled-back native Company
+read share for their own disposable stock user; no live grants were added.
+
+No ERPNext core changes, historical data corrections, commits or pushes.

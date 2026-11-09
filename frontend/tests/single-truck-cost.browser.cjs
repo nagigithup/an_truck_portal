@@ -8,6 +8,7 @@ frappe.init(site='dev.localhost',sites_path='${root}/sites');frappe.connect();fr
 ${code}
 frappe.destroy()`],{cwd:root+'/sites',encoding:'utf8'}).trim();}
 const fingerprint=()=>python(`rows={dt:frappe.get_all(dt,fields=['name','modified','docstatus'],order_by='name') for dt in ['Vehicle Master','Vehicle Import File','Purchase Receipt','Purchase Receipt Item','Landed Cost Voucher','GL Entry','Stock Ledger Entry']}
+rows.update({dt:frappe.get_all(dt,fields=['name','modified','docstatus'],order_by='name') for dt in ['Stock Reconciliation','Stock Reconciliation Item','Serial and Batch Bundle','Serial and Batch Entry']})
 print(hashlib.sha256(frappe.as_json(rows).encode()).hexdigest())`);
 const before=fingerprint();
 const seed=JSON.parse(python(`from werkzeug.test import EnvironBuilder
@@ -20,8 +21,11 @@ join \u0060tabVehicle Import File\u0060 vif on vif.name=vm.vehicle_import_file
 join \u0060tabPurchase Receipt\u0060 pr on pr.name=vm.purchase_receipt
 join \u0060tabPurchase Receipt Item\u0060 pri on pri.name=vm.purchase_receipt_item
 where vm.disabled=0 and pr.docstatus=1 and pr.is_return=0 and vif.status not in ('Completed','Cancelled') order by pri.qty""",as_dict=True)
-one=next(r for r in rows if r.qty==1);many=next(r for r in rows if r.qty>1)
-print(json.dumps({'sid':s.sid,'one':one,'many':many,'account':frappe.db.get_value('Company',one.company,'default_expense_account')}))`));
+from an_truck_portal.single_truck_cost import _target
+many=next(r for r in rows if r.qty>1 and _target(frappe.get_doc('Vehicle Import File',r.vehicle_import_file),r.name)[0]['eligible'])
+one=next(r for r in rows if r.qty==1 and r.vehicle_import_file!=many.vehicle_import_file)
+print(json.dumps({'sid':s.sid,'one':one,'many':many,'account':frappe.db.get_value('Company',one.company,'default_expense_account'),
+ 'many_account':frappe.db.get_value('Company',many.company,'default_expense_account')}))`));
 (async()=>{
  const browser=await chromium.launch({headless:true});
  const context=await browser.newContext({viewport:{width:1440,height:1000}});
@@ -97,17 +101,44 @@ print(json.dumps({'sid':s.sid,'one':one,'many':many,'account':frappe.db.get_valu
    await page.getByRole('button',{name:t('Add Cost to One Truck'),exact:true}).first().click();
    const shared=wait('get_single_truck_cost_target');
    await dialog.getByLabel(t('VIN / Chassis Number')).fill(seed.many.name);
-   const blocked=(await (await shared).json()).message;assert.equal(blocked.eligible,false);
-   await dialog.getByRole('alert').waitFor();
-   assert.equal(await dialog.getByRole('button',{name:t('Review Cost'),exact:true}).isDisabled(),true);
-   const sharedKey='This receipt row contains multiple units or VINs. ERPNext v16 allocates landed cost to the whole receipt row, so a cost for only this VIN cannot be submitted safely.';
-   assert.equal(blocked.reason,sharedKey);
-   await dialog.getByText(t(sharedKey),{exact:true}).waitFor();
+   const target=(await (await shared).json()).message;assert.equal(target.eligible,true);
+   assert.equal(target.doctype,'Stock Reconciliation');
+   await dialog.getByText(t('Stock Reconciliation'),{exact:true}).waitFor();
+   await dialog.getByLabel(t('Cost Amount')).fill('5000');
+   await dialog.getByLabel(t('Expense Account')).selectOption(seed.many_account);
+   const serialPreview=wait('preview_single_truck_cost');
+   await dialog.getByRole('button',{name:t('Review Cost'),exact:true}).click();
+   response=await serialPreview;assert.equal(response.status(),200,await response.text());
+   const serial=(await response.json()).message.summary;
+   assert.equal(serial.doctype,'Stock Reconciliation');assert.equal(serial.amount,5000);
+   assert.equal(serial.new_valuation,serial.current_valuation+5000);
+   await dialog.getByRole('heading',{name:t('Confirm Single-Truck Cost'),exact:true}).waitFor();
    await page.screenshot({path:`/tmp/single-truck-cost-${lang}-shared-row.png`});
+   await page.setViewportSize({width:390,height:844});
+   const serialBounds=await dialog.boundingBox();
+   assert.ok(serialBounds.x>=0&&serialBounds.y>=0&&serialBounds.x+serialBounds.width<=391&&serialBounds.y+serialBounds.height<=845);
+   await page.screenshot({path:`/tmp/single-truck-cost-${lang}-shared-row-mobile.png`});
+   await page.setViewportSize({width:1440,height:1000});
    await dialog.getByRole('button',{name:t('Cancel'),exact:true}).click();
+   // Native postings/detail data are covered by rollback integration tests.
+   // Render the new read-only detail route with a fixture response only.
+   const detailPattern='**/api/method/an_truck_portal.api.import_file.get_single_truck_revaluation*';
+   const detailName='UI-READONLY-SERIAL-REVALUATION';
+   await page.route(detailPattern,route=>route.fulfill({json:{message:{...serial,name:detailName,docstatus:1,
+    requested_amount:5000,previous_valuation:serial.current_valuation,quantity:1}}}));
+   await page.goto(origin+'/an-truck-portal/serial-revaluations/'+detailName);
+   await page.getByRole('heading',{name:detailName,exact:true}).waitFor();
+   await page.getByRole('heading',{name:t('Serial Valuation Adjustment'),exact:true}).waitFor();
+   assert.ok((await page.getByRole('link',{name:t('Open in Desk'),exact:true}).getAttribute('href')).includes('/stock-reconciliation/'));
+   await page.screenshot({path:`/tmp/single-truck-cost-${lang}-detail.png`});
+   await page.setViewportSize({width:390,height:844});
+   assert.equal(await page.evaluate(()=>document.documentElement.scrollWidth>innerWidth),false);
+   await page.screenshot({path:`/tmp/single-truck-cost-${lang}-detail-mobile.png`});
+   await page.setViewportSize({width:1440,height:1000});
+   await page.unroute(detailPattern);
   }
   assert.deepEqual(errors,[]);assert.equal(fingerprint(),before);
-  console.log(JSON.stringify({arabicRTL:'passed',englishLTR:'passed',mobile:'passed',existingBulkDialog:'passed',nativePreview:'passed',foreignVINBlocked:'passed',sharedRowBlocked:'passed',retryKeyStable:'passed',staleConfirmationReview:'passed',businessRecordsUnchanged:'passed',pageErrors:errors}));
+  console.log(JSON.stringify({arabicRTL:'passed',englishLTR:'passed',mobile:'passed',existingBulkDialog:'passed',nativeLCVPreview:'passed',foreignVINBlocked:'passed',sharedRowSerialRevaluationPreview:'passed',readOnlyDetailRoute:'passed (fixture response)',retryKeyStable:'passed',staleConfirmationReview:'passed',businessRecordsUnchanged:'passed',pageErrors:errors}));
  }catch(e){await page.screenshot({path:'/tmp/single-truck-cost-failure.png'});throw e;}
  finally{await context.request.get(origin+'/api/method/logout').catch(()=>{});await browser.close();}
 })().catch(e=>{console.error(e.stack);process.exitCode=1;});

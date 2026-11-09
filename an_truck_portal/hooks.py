@@ -160,6 +160,13 @@ after_migrate = "an_truck_portal.setup.after_migrate"
 # }
 
 doc_events = {
+	"Stock Reconciliation": {
+		"validate":"an_truck_portal.single_truck_cost.validate_serial_revaluation",
+		"before_cancel":"an_truck_portal.single_truck_cost.validate_revaluation_cancel",
+		"on_submit":"an_truck.serial_vehicle_cost.refresh_vehicle",
+		"on_cancel":"an_truck.serial_vehicle_cost.refresh_vehicle",
+		"on_change":"an_truck.serial_vehicle_cost.refresh_vehicle",
+	},
 	"Landed Cost Voucher": {
 		"validate": "an_truck_portal.single_truck_cost.validate_single_truck_cost",
 	},

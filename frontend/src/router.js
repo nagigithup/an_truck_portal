@@ -10,6 +10,7 @@ import PurchaseInvoiceDetail from "./views/PurchaseInvoiceDetail.vue";
 import PurchaseReceiptDetail from "./views/PurchaseReceiptDetail.vue";
 import SupplierPaymentDetail from "./views/SupplierPaymentDetail.vue";
 import LandedCostDetail from "./views/LandedCostDetail.vue";
+import SerialRevaluationDetail from "./views/SerialRevaluationDetail.vue";
 import SalesDocumentDetail from "./views/SalesDocumentDetail.vue";
 import VehicleDeliveryPrint from "./views/VehicleDeliveryPrint.vue";
 import WarrantyDashboard from "./views/WarrantyDashboard.vue";
@@ -74,6 +75,12 @@ const routes = [
 		path: "/supplier-payments/:name",
 		name: "supplier-payment-detail",
 		component: SupplierPaymentDetail,
+		props: true,
+	},
+	{
+		path: "/serial-revaluations/:name",
+		name: "serial-revaluation-detail",
+		component: SerialRevaluationDetail,
 		props: true,
 	},
 	{

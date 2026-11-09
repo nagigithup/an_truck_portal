@@ -40,6 +40,8 @@ const permissions = computed(() => data.value.permissions || {});
 const canCreatePO = computed(() => data.value.next_actions?.includes("create_purchase_order"));
 const canReceive = computed(() => data.value.next_actions?.includes("receive_vehicles"));
 const canAddCost = computed(() => data.value.next_actions?.includes("add_import_cost"));
+const canAddSingleCost = computed(() => !['Completed','Cancelled'].includes(data.value.import_file?.status) && submittedReceipts.value.length &&
+	['Landed Cost Voucher','Stock Reconciliation'].some(dt=>permissions.value[dt]?.read && permissions.value[dt]?.create && permissions.value[dt]?.submit));
 const canCloseFile = computed(() => data.value.next_actions?.includes("close_import_file"));
 const isCompleted = computed(() => data.value.import_file?.status === "Completed");
 const submittedReceipts = computed(() =>
@@ -84,6 +86,7 @@ function documentDoctype(group) {
 		purchase_invoices: "Purchase Invoice",
 		supplier_payments: "Payment Entry",
 		landed_cost_vouchers: "Landed Cost Voucher",
+		serial_cost_adjustments: "Stock Reconciliation",
 		quotations: "Quotation",
 		sales_orders: "Sales Order",
 		delivery_notes: "Delivery Note",
@@ -98,6 +101,7 @@ function documentRoute(group, name) {
 		purchase_invoices: { name: "purchase-invoice-detail", params: { name } },
 		supplier_payments: { name: "supplier-payment-detail", params: { name } },
 		landed_cost_vouchers: { name: "landed-cost-detail", params: { name } },
+		serial_cost_adjustments: { name: "serial-revaluation-detail", params: { name } },
 	}[group];
 }
 async function load() {
@@ -569,7 +573,7 @@ onMounted(load);
 				</div>
 			</section>
 
-			<div class="action-strip" v-if="canCreatePO || canReceive || canAddCost">
+			<div class="action-strip" v-if="canCreatePO || canReceive || canAddCost || canAddSingleCost">
 				<button v-if="canCreatePO" class="button" @click="openPurchase">
 					{{ __("Create Purchase Order") }}
 				</button>
@@ -579,7 +583,7 @@ onMounted(load);
 				<button v-if="canAddCost" class="button secondary" @click="openCost">
 					{{ __("Add Import Cost") }}
 				</button>
-				<button v-if="canAddCost && permissions['Landed Cost Voucher']?.submit" class="button secondary" @click="openSingleTruckCost">{{ __('Add Cost to One Truck') }}</button>
+				<button v-if="canAddSingleCost" class="button secondary" @click="openSingleTruckCost">{{ __('Add Cost to One Truck') }}</button>
 			</div>
 			<p v-if="singleTruckCostError" class="form-error" role="alert">{{ singleTruckCostError }}</p>
 
@@ -748,7 +752,7 @@ onMounted(load);
 					<button v-if="canAddCost" class="button small" @click="openCost">
 						{{ __("+ Add Cost") }}
 					</button>
-					<button v-if="canAddCost && permissions['Landed Cost Voucher']?.submit" class="button small secondary" @click="openSingleTruckCost">{{ __('Add Cost to One Truck') }}</button>
+					<button v-if="canAddSingleCost" class="button small secondary" @click="openSingleTruckCost">{{ __('Add Cost to One Truck') }}</button>
 				</div>
 				<div class="cost-totals">
 					<div>
@@ -787,13 +791,13 @@ onMounted(load);
 								</td>
 							</tr>
 							<tr v-for="row in data.costs.rows" :key="`${row.voucher}-${row.idx}`">
-								<td>{{ row.description }}</td>
+								<td><small v-if="row.doctype === 'Stock Reconciliation'">{{ __('Stock Reconciliation') }} · </small>{{ row.description }}</td>
 								<td>{{ row.expense_account }}</td>
 								<td>{{ amount(row.amount, row.account_currency) }}</td>
 								<td>{{ row.account_currency }}</td>
 								<td>{{ date(row.date) }}</td>
 								<td>
-									<router-link :to="{ name: 'landed-cost-detail', params: { name: row.voucher } }"
+									<router-link :to="{ name: row.doctype === 'Stock Reconciliation' ? 'serial-revaluation-detail' : 'landed-cost-detail', params: { name: row.voucher } }"
 										><bdi>{{ row.voucher }}</bdi></router-link
 									>
 								</td>

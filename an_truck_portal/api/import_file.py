@@ -88,6 +88,12 @@ def create_single_truck_cost(vehicle_import_file, data, request_key, confirmatio
 	return create(vehicle_import_file,data,request_key,confirmation)
 
 
+@frappe.whitelist(methods=["GET"])
+def get_single_truck_revaluation(name):
+	from an_truck_portal.single_truck_cost import get_revaluation
+	return get_revaluation(name)
+
+
 @frappe.whitelist(methods=["POST"])
 def upload_cost_attachment(vehicle_import_file):
 	_require_mutable_import_file(vehicle_import_file)
