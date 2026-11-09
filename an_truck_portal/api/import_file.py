@@ -64,6 +64,30 @@ def create_landed_cost_voucher(vehicle_import_file, data=None, submit_now=0, ide
 	return transactions.create_landed_cost_voucher(vehicle_import_file, data, submit_now, idempotency_key)
 
 
+@frappe.whitelist(methods=["GET"])
+def search_single_truck_cost_vehicles(vehicle_import_file, search="", **kwargs):
+	from an_truck_portal.single_truck_cost import search_vehicles
+	return search_vehicles(vehicle_import_file,search)
+
+
+@frappe.whitelist(methods=["GET"])
+def get_single_truck_cost_target(vehicle_import_file, vehicle):
+	from an_truck_portal.single_truck_cost import get_target
+	return get_target(vehicle_import_file,vehicle)
+
+
+@frappe.whitelist(methods=["POST"])
+def preview_single_truck_cost(vehicle_import_file, data):
+	from an_truck_portal.single_truck_cost import preview
+	return preview(vehicle_import_file,data)
+
+
+@frappe.whitelist(methods=["POST"])
+def create_single_truck_cost(vehicle_import_file, data, request_key, confirmation):
+	from an_truck_portal.single_truck_cost import create
+	return create(vehicle_import_file,data,request_key,confirmation)
+
+
 @frappe.whitelist(methods=["POST"])
 def upload_cost_attachment(vehicle_import_file):
 	_require_mutable_import_file(vehicle_import_file)

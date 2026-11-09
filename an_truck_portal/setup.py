@@ -75,8 +75,23 @@ def _ensure_custom_fields():
 def after_install():
 	_ensure_role()
 	_ensure_custom_fields()
+	ensure_single_truck_cost_fields()
 
 
 def after_migrate():
 	_ensure_role()
 	_ensure_custom_fields()
+	ensure_single_truck_cost_fields()
+
+
+def ensure_single_truck_cost_fields():
+	"""Additive audit fields only; existing vouchers and receipts are untouched."""
+	create_custom_fields({"Landed Cost Voucher":[
+		{"fieldname":"custom_portal_truck_cost_vehicle","label":"Single-Truck Cost Vehicle","fieldtype":"Link",
+		 "options":"Vehicle Master","insert_after":"company","read_only":1,"no_copy":1,
+		 "depends_on":"eval:doc.custom_portal_truck_cost_vehicle"},
+		{"fieldname":"custom_portal_truck_cost_request","label":"Single-Truck Cost Request","fieldtype":"Data",
+		 "hidden":1,"read_only":1,"no_copy":1,"unique":1},
+		{"fieldname":"custom_portal_truck_cost_payload","label":"Single-Truck Cost Payload","fieldtype":"Data",
+		 "hidden":1,"read_only":1,"no_copy":1},
+	]},update=True)

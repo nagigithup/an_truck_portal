@@ -6,6 +6,7 @@ import PurchaseOrderDialog from "../components/PurchaseOrderDialog.vue";
 import VehicleDrawer from "../components/VehicleDrawer.vue";
 import FormField from "../components/FormField.vue";
 import TemplateSpecifications from "../components/TemplateSpecifications.vue";
+import SingleTruckCostDialog from "../components/SingleTruckCostDialog.vue";
 
 const props = defineProps({ name: String });
 const { notification } = inject("portal");
@@ -23,6 +24,8 @@ const options = ref(null);
 const purchaseDialog = ref(null);
 const receivingDialog = ref(null);
 const costDialog = ref(null);
+const singleTruckCostDialog = ref(null);
+const singleTruckCostError = ref("");
 const closeFileConfirm = ref(null);
 const closeFileError = ref("");
 
@@ -278,6 +281,15 @@ async function openCost() {
 		],
 	};
 	show(costDialog);
+}
+async function openSingleTruckCost() {
+	singleTruckCostError.value = "";
+	try { await loadOptions(); singleTruckCostDialog.value.open(); }
+	catch (e) { singleTruckCostError.value = e.message; }
+}
+async function singleTruckCostCreated(result) {
+	notification.value = __("Operation completed successfully: {0}", [result.name]);
+	await load();
 }
 function addCostRow() {
 	costForm.value.rows.push({
@@ -567,7 +579,9 @@ onMounted(load);
 				<button v-if="canAddCost" class="button secondary" @click="openCost">
 					{{ __("Add Import Cost") }}
 				</button>
+				<button v-if="canAddCost && permissions['Landed Cost Voucher']?.submit" class="button secondary" @click="openSingleTruckCost">{{ __('Add Cost to One Truck') }}</button>
 			</div>
+			<p v-if="singleTruckCostError" class="form-error" role="alert">{{ singleTruckCostError }}</p>
 
 			<div class="workspace-grid">
 				<section class="panel section-card purchase-card">
@@ -734,6 +748,7 @@ onMounted(load);
 					<button v-if="canAddCost" class="button small" @click="openCost">
 						{{ __("+ Add Cost") }}
 					</button>
+					<button v-if="canAddCost && permissions['Landed Cost Voucher']?.submit" class="button small secondary" @click="openSingleTruckCost">{{ __('Add Cost to One Truck') }}</button>
 				</div>
 				<div class="cost-totals">
 					<div>
@@ -1148,6 +1163,7 @@ onMounted(load);
 				</div>
 			</form>
 		</dialog>
+		<SingleTruckCostDialog ref="singleTruckCostDialog" :import-file="name" :accounts="options?.expense_accounts || []" @created="singleTruckCostCreated" />
 		<ConfirmDialog
 			ref="closeFileConfirm"
 			title="Close Vehicle Import File"

@@ -160,6 +160,9 @@ after_migrate = "an_truck_portal.setup.after_migrate"
 # }
 
 doc_events = {
+	"Landed Cost Voucher": {
+		"validate": "an_truck_portal.single_truck_cost.validate_single_truck_cost",
+	},
 	"Item Price": {
 		"validate": "an_truck_portal.api.spare_parts_pricing.validate_item_price",
 	},
